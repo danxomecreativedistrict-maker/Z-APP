@@ -25,5 +25,6 @@ export const config = {
     '/settings/:path*',
     '/whatsapp/:path*',
     '/knowledge/:path*',
+    '/nova/:path*',
   ],
 };

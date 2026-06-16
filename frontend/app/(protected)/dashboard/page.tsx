@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   BookOpen,
+  Bot,
   LogOut,
   MessageCircle,
   MessageSquare,
@@ -58,6 +59,12 @@ export default function DashboardPage() {
             <Link href="/whatsapp">
               <MessageCircle className="h-4 w-4" />
               WhatsApp
+            </Link>
+          </Button>
+          <Button variant="success" asChild>
+            <Link href="/nova">
+              <Bot className="h-4 w-4" />
+              Tester NOVA
             </Link>
           </Button>
           <Button variant="outline" asChild>

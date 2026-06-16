@@ -64,6 +64,21 @@ export class WhatsappService implements OnModuleDestroy {
     this.emitter.on('status', listener);
   }
 
+  /** NOVA (Module 6) s'abonne ici pour traiter les messages entrants des prospects. */
+  onInboundMessage(listener: (companyId: string, from: string, text: string) => void): void {
+    this.emitter.on('inbound', listener);
+  }
+
+  /** Envoie un message texte à un prospect via la session WhatsApp de l'entreprise. */
+  async sendText(companyId: string, to: string, text: string): Promise<void> {
+    const sock = this.sockets.get(companyId);
+    if (!sock) {
+      this.logger.warn(`Aucune session WhatsApp active pour l'entreprise ${companyId}`);
+      return;
+    }
+    await sock.sendMessage(to, { text });
+  }
+
   /** Résout l'entreprise de l'utilisateur (isolation par userId). */
   async resolveCompanyId(userId: string): Promise<string> {
     const company = await this.prisma.company.findFirst({ where: { userId } });
@@ -151,6 +166,23 @@ export class WhatsappService implements OnModuleDestroy {
     this.statuses.set(companyId, 'CONNECTING');
 
     sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('messages.upsert', (upsert) => {
+      if (upsert.type !== 'notify') return;
+      for (const msg of upsert.messages) {
+        const from = msg.key.remoteJid;
+        if (!msg.message || msg.key.fromMe || !from) continue;
+        if (from.endsWith('@g.us') || from === 'status@broadcast') continue;
+        const text = (
+          msg.message.conversation ??
+          msg.message.extendedTextMessage?.text ??
+          ''
+        ).trim();
+        if (text) {
+          this.emitter.emit('inbound', companyId, from, text);
+        }
+      }
+    });
 
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;

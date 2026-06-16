@@ -9,5 +9,6 @@ import { WhatsappGateway } from './whatsapp.gateway';
   imports: [JwtModule.register({}), MailModule],
   controllers: [WhatsappController],
   providers: [WhatsappService, WhatsappGateway],
+  exports: [WhatsappService],
 })
 export class WhatsappModule {}

@@ -117,9 +117,14 @@ export class KnowledgeService {
     return { chunks: chunks.length };
   }
 
-  /** Recherche sémantique top-k (cosine) — utilisée par NOVA (Module 6). */
+  /** Recherche sémantique top-k (cosine) pour l'utilisateur courant. */
   async search(userId: string, query: string, k = 5): Promise<SearchResult[]> {
     const companyId = await this.resolveCompanyId(userId);
+    return this.searchByCompany(companyId, query, k);
+  }
+
+  /** Recherche sémantique top-k (cosine) par entreprise — utilisée par NOVA (Module 6). */
+  async searchByCompany(companyId: string, query: string, k = 5): Promise<SearchResult[]> {
     const vec = this.toVector(await this.embeddings.embed(query));
     const rows = await this.prisma.$queryRaw<SearchResult[]>`
       SELECT id, title, content, type::text AS type,

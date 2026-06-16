@@ -1,6 +1,21 @@
 // Fakes in-memory typés pour tester auth + company sans Neon/Upstash/Resend/Cloudinary réels.
 import { ConfigService } from '@nestjs/config';
-import { Company, KBType, KnowledgeItem, Plan, User } from '@prisma/client';
+import {
+  Company,
+  Conversation,
+  ConvStatus,
+  KBType,
+  KnowledgeItem,
+  Message,
+  Notification,
+  NotifType,
+  Plan,
+  Prospect,
+  ProspectScore,
+  ProspectStatus,
+  Sender,
+  User,
+} from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
@@ -8,6 +23,8 @@ import { MailService } from '../src/mail/mail.service';
 import { UploadthingService } from '../src/uploadthing/uploadthing.service';
 import { WhatsappService, WhatsappStatusPayload } from '../src/whatsapp/whatsapp.service';
 import { EmbeddingService } from '../src/knowledge/embedding.service';
+import { AnthropicService } from '../src/nova/anthropic.service';
+import { NovaReply } from '../src/nova/nova.types';
 
 interface UserCreateData {
   email: string;
@@ -107,6 +124,9 @@ export class FakePrisma {
         this.companies.find((c) => (id !== undefined ? c.id === id : c.userId === userId)) ?? null
       );
     },
+    findUnique: async (args: { where: { id: string } }): Promise<Company | null> => {
+      return this.companies.find((c) => c.id === args.where.id) ?? null;
+    },
     create: async (args: { data: CompanyCreateData }): Promise<Company> => {
       const company = buildCompany(args.data);
       this.companies.push(company);
@@ -175,6 +195,122 @@ export class FakePrisma {
       const index = this.knowledgeItems.findIndex((k) => k.id === args.where.id);
       if (index === -1) throw new Error('KnowledgeItem introuvable');
       return this.knowledgeItems.splice(index, 1)[0];
+    },
+  };
+
+  private prospects: Prospect[] = [];
+  private conversations: Conversation[] = [];
+  private messages: Message[] = [];
+  private notifications: Notification[] = [];
+
+  prospect = {
+    findFirst: async (args: {
+      where: { companyId: string; phone: string };
+    }): Promise<Prospect | null> => {
+      return (
+        this.prospects.find(
+          (p) => p.companyId === args.where.companyId && p.phone === args.where.phone,
+        ) ?? null
+      );
+    },
+    create: async (args: { data: { companyId: string; phone: string } }): Promise<Prospect> => {
+      const prospect: Prospect = {
+        id: randomUUID(),
+        companyId: args.data.companyId,
+        phone: args.data.phone,
+        name: null,
+        email: null,
+        score: ProspectScore.COLD,
+        status: ProspectStatus.NEW,
+        lastContact: null,
+        createdAt: new Date(),
+      };
+      this.prospects.push(prospect);
+      return prospect;
+    },
+    update: async (args: { where: { id: string }; data: Partial<Prospect> }): Promise<Prospect> => {
+      const prospect = this.prospects.find((p) => p.id === args.where.id);
+      if (!prospect) throw new Error('Prospect introuvable');
+      Object.assign(prospect, args.data);
+      return prospect;
+    },
+  };
+
+  conversation = {
+    findFirst: async (args: {
+      where: { companyId: string; prospectPhone: string };
+    }): Promise<Conversation | null> => {
+      return (
+        this.conversations.find(
+          (c) =>
+            c.companyId === args.where.companyId &&
+            c.prospectPhone === args.where.prospectPhone &&
+            c.status !== ConvStatus.CLOSED,
+        ) ?? null
+      );
+    },
+    create: async (args: {
+      data: { companyId: string; prospectId: string; prospectPhone: string; status: ConvStatus };
+    }): Promise<Conversation> => {
+      const conversation: Conversation = {
+        id: randomUUID(),
+        companyId: args.data.companyId,
+        prospectId: args.data.prospectId,
+        prospectPhone: args.data.prospectPhone,
+        status: args.data.status,
+        startedAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.conversations.push(conversation);
+      return conversation;
+    },
+    update: async (args: {
+      where: { id: string };
+      data: Partial<Conversation>;
+    }): Promise<Conversation> => {
+      const conversation = this.conversations.find((c) => c.id === args.where.id);
+      if (!conversation) throw new Error('Conversation introuvable');
+      Object.assign(conversation, args.data);
+      return conversation;
+    },
+  };
+
+  message = {
+    create: async (args: {
+      data: { conversationId: string; sender: Sender; content: string };
+    }): Promise<Message> => {
+      const message: Message = {
+        id: randomUUID(),
+        conversationId: args.data.conversationId,
+        sender: args.data.sender,
+        content: args.data.content,
+        type: 'TEXT',
+        sentAt: new Date(),
+      };
+      this.messages.push(message);
+      return message;
+    },
+    findMany: async (args: { where: { conversationId: string } }): Promise<Message[]> => {
+      return this.messages.filter((m) => m.conversationId === args.where.conversationId);
+    },
+  };
+
+  notification = {
+    create: async (args: {
+      data: { companyId: string; type: NotifType; recipient: string; content: string };
+    }): Promise<Notification> => {
+      const notification: Notification = {
+        id: randomUUID(),
+        companyId: args.data.companyId,
+        type: args.data.type,
+        recipient: args.data.recipient,
+        content: args.data.content,
+        sent: false,
+        read: false,
+        sentAt: new Date(),
+      };
+      this.notifications.push(notification);
+      return notification;
     },
   };
 
@@ -262,6 +398,12 @@ export class FakeWhatsapp {
   onStatus(): void {
     // no-op pour les tests
   }
+  onInboundMessage(): void {
+    // no-op pour les tests
+  }
+  async sendText(): Promise<void> {
+    // no-op pour les tests
+  }
   async resolveCompanyId(): Promise<string> {
     return 'company-e2e';
   }
@@ -288,6 +430,27 @@ export class FakeEmbedding {
 
   asService(): EmbeddingService {
     return this as unknown as EmbeddingService;
+  }
+}
+
+export class FakeAnthropic {
+  public nextReply: NovaReply = {
+    message: 'Bonjour ! Comment puis-je vous aider aujourd’hui ?',
+    intent: 'INFO_QUERY',
+    notifyManager: false,
+    orderData: null,
+  };
+
+  async generateNovaReply(): Promise<NovaReply> {
+    return this.nextReply;
+  }
+
+  get isLive(): boolean {
+    return true;
+  }
+
+  asService(): AnthropicService {
+    return this as unknown as AnthropicService;
   }
 }
 
