@@ -1,12 +1,13 @@
 // Fakes in-memory typés pour tester auth + company sans Neon/Upstash/Resend/Cloudinary réels.
 import { ConfigService } from '@nestjs/config';
-import { Company, Plan, User } from '@prisma/client';
+import { Company, KBType, KnowledgeItem, Plan, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
 import { MailService } from '../src/mail/mail.service';
 import { UploadthingService } from '../src/uploadthing/uploadthing.service';
 import { WhatsappService, WhatsappStatusPayload } from '../src/whatsapp/whatsapp.service';
+import { EmbeddingService } from '../src/knowledge/embedding.service';
 
 interface UserCreateData {
   email: string;
@@ -119,6 +120,76 @@ export class FakePrisma {
     },
   };
 
+  private knowledgeItems: KnowledgeItem[] = [];
+
+  knowledgeItem = {
+    create: async (args: {
+      data: {
+        companyId: string;
+        type: KBType;
+        title: string;
+        content: string;
+        sourceFile?: string | null;
+      };
+    }): Promise<KnowledgeItem> => {
+      const item: KnowledgeItem = {
+        id: randomUUID(),
+        companyId: args.data.companyId,
+        type: args.data.type,
+        title: args.data.title,
+        content: args.data.content,
+        sourceFile: args.data.sourceFile ?? null,
+        createdAt: new Date(),
+      };
+      this.knowledgeItems.push(item);
+      return item;
+    },
+    findMany: async (args: {
+      where: { companyId: string; type?: KBType };
+    }): Promise<KnowledgeItem[]> => {
+      return this.knowledgeItems.filter(
+        (k) =>
+          k.companyId === args.where.companyId &&
+          (args.where.type ? k.type === args.where.type : true),
+      );
+    },
+    findFirst: async (args: {
+      where: { id: string; companyId: string };
+    }): Promise<KnowledgeItem | null> => {
+      return (
+        this.knowledgeItems.find(
+          (k) => k.id === args.where.id && k.companyId === args.where.companyId,
+        ) ?? null
+      );
+    },
+    update: async (args: {
+      where: { id: string };
+      data: Partial<KnowledgeItem>;
+    }): Promise<KnowledgeItem> => {
+      const item = this.knowledgeItems.find((k) => k.id === args.where.id);
+      if (!item) throw new Error('KnowledgeItem introuvable');
+      Object.assign(item, args.data);
+      return item;
+    },
+    delete: async (args: { where: { id: string } }): Promise<KnowledgeItem> => {
+      const index = this.knowledgeItems.findIndex((k) => k.id === args.where.id);
+      if (index === -1) throw new Error('KnowledgeItem introuvable');
+      return this.knowledgeItems.splice(index, 1)[0];
+    },
+  };
+
+  // Stubs SQL brut (le vrai pgvector est testé en live) : embedding ignoré, recherche = items.
+  $executeRaw = async (..._args: unknown[]): Promise<number> => 0;
+
+  $queryRaw = async (..._args: unknown[]): Promise<unknown[]> =>
+    this.knowledgeItems.map((k) => ({
+      id: k.id,
+      title: k.title,
+      content: k.content,
+      type: k.type,
+      score: 0.9,
+    }));
+
   asService(): PrismaService {
     return this as unknown as PrismaService;
   }
@@ -206,6 +277,17 @@ export class FakeWhatsapp {
 
   asService(): WhatsappService {
     return this as unknown as WhatsappService;
+  }
+}
+
+export class FakeEmbedding {
+  async embed(text: string): Promise<number[]> {
+    // vecteur court déterministe (suffisant pour les tests ; le vrai RAG est testé en live)
+    return [text.length % 7, (text.length * 3) % 11, 1];
+  }
+
+  asService(): EmbeddingService {
+    return this as unknown as EmbeddingService;
   }
 }
 

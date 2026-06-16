@@ -99,15 +99,16 @@ model Product {
 }
 
 model KnowledgeItem {
-  id         String   @id @default(cuid())
+  id         String                       @id @default(cuid())
   companyId  String
-  company    Company  @relation(fields: [companyId], references: [id])
+  company    Company                      @relation(fields: [companyId], references: [id])
   type       KBType
   title      String
   content    String
   sourceFile String?
-  embedding  Float[]
-  createdAt  DateTime @default(now())
+  // Embedding OpenAI (text-embedding-3-small, 1536 dims) — pgvector. Manipulé en SQL brut.
+  embedding  Unsupported("vector(1536)")?
+  createdAt  DateTime                     @default(now())
 }
 
 model Conversation {

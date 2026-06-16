@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { CompanyModule } from './company/company.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { KnowledgeModule } from './knowledge/knowledge.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     AuthModule,
     CompanyModule,
     WhatsappModule,
+    KnowledgeModule,
   ],
 })
 export class AppModule {}

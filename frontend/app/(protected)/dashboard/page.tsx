@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  BookOpen,
   LogOut,
   MessageCircle,
   MessageSquare,
@@ -57,6 +58,12 @@ export default function DashboardPage() {
             <Link href="/whatsapp">
               <MessageCircle className="h-4 w-4" />
               WhatsApp
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/knowledge">
+              <BookOpen className="h-4 w-4" />
+              Connaissances
             </Link>
           </Button>
           <Button variant="outline" asChild>
