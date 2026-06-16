@@ -88,6 +88,37 @@ export class NovaService {
     return { reply: reply.message, intent: reply.intent, conversationId: conversation.id };
   }
 
+  /** Appel WhatsApp manqué : envoie un message d'accueil automatique + notifie le gérant. */
+  async handleMissedCall(companyId: string, prospectPhone: string): Promise<NovaResult> {
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) {
+      throw new NotFoundException('Entreprise introuvable.');
+    }
+    const prospect = await this.upsertProspect(companyId, prospectPhone);
+    const conversation = await this.getOrCreateConversation(companyId, prospect.id, prospectPhone);
+
+    const reply = `Bonjour ! Je suis ${company.novaName}, l'assistant de ${company.name}. Je n'ai pas pu prendre votre appel. Comment puis-je vous aider ?`;
+
+    await this.prisma.message.create({
+      data: { conversationId: conversation.id, sender: Sender.NOVA, content: reply },
+    });
+    await this.prisma.prospect.update({
+      where: { id: prospect.id },
+      data: { status: ProspectStatus.CONTACTED, lastContact: new Date() },
+    });
+    await this.prisma.notification.create({
+      data: {
+        companyId,
+        type: NotifType.MISSED_CALL,
+        recipient: company.alertPhone || company.managerPhone || '',
+        content: `Appel manqué du prospect ${prospectPhone}.`,
+      },
+    });
+
+    this.logger.log(`Appel manqué de ${prospectPhone} → réponse automatique de NOVA envoyée.`);
+    return { reply, intent: 'FOLLOW_UP', conversationId: conversation.id };
+  }
+
   private toTurns(history: Message[]): NovaTurn[] {
     const turns: NovaTurn[] = history.map((m) => ({
       role: m.sender === Sender.PROSPECT ? 'user' : 'assistant',

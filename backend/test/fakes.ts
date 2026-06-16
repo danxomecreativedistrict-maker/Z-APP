@@ -401,6 +401,12 @@ export class FakeWhatsapp {
   onInboundMessage(): void {
     // no-op pour les tests
   }
+  onMissedCall(): void {
+    // no-op pour les tests
+  }
+  onInboundAudio(): void {
+    // no-op pour les tests
+  }
   async sendText(): Promise<void> {
     // no-op pour les tests
   }

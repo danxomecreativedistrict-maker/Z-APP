@@ -65,4 +65,14 @@ describe('NovaService', () => {
     const r2 = await service.handleIncomingMessage(companyId, '22993@s.whatsapp.net', 'Des sacs ?');
     expect(r1.conversationId).toBe(r2.conversationId);
   });
+
+  it('appel manqué : message d’accueil automatique + prospect CONTACTED', async () => {
+    const result = await service.handleMissedCall(companyId, '22994@s.whatsapp.net');
+    expect(result.reply).toContain('NOVA');
+    expect(result.reply.toLowerCase()).toContain('appel');
+    const prospect = await prisma.prospect.findFirst({
+      where: { companyId, phone: '22994@s.whatsapp.net' },
+    });
+    expect(prospect?.status).toBe('CONTACTED');
+  });
 });

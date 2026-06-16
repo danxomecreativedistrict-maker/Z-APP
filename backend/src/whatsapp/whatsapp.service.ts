@@ -2,7 +2,12 @@ import { EventEmitter } from 'events';
 import { Injectable, Logger, NotFoundException, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WAStatus } from '@prisma/client';
-import makeWASocket, { DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import makeWASocket, {
+  DisconnectReason,
+  downloadMediaMessage,
+  fetchLatestBaileysVersion,
+  type WAMessage,
+} from '@whiskeysockets/baileys';
 import { toDataURL } from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -67,6 +72,18 @@ export class WhatsappService implements OnModuleDestroy {
   /** NOVA (Module 6) s'abonne ici pour traiter les messages entrants des prospects. */
   onInboundMessage(listener: (companyId: string, from: string, text: string) => void): void {
     this.emitter.on('inbound', listener);
+  }
+
+  /** Appel WhatsApp entrant (non décrochable par le bot) → traité comme appel manqué. */
+  onMissedCall(listener: (companyId: string, from: string) => void): void {
+    this.emitter.on('missedCall', listener);
+  }
+
+  /** Note vocale entrante : transmet le buffer audio pour transcription (Whisper). */
+  onInboundAudio(
+    listener: (companyId: string, from: string, audio: Buffer, mimetype: string) => void,
+  ): void {
+    this.emitter.on('inboundAudio', listener);
   }
 
   /** Envoie un message texte à un prospect via la session WhatsApp de l'entreprise. */
@@ -180,6 +197,17 @@ export class WhatsappService implements OnModuleDestroy {
         ).trim();
         if (text) {
           this.emitter.emit('inbound', companyId, from, text);
+        } else if (msg.message.audioMessage) {
+          void this.handleAudio(companyId, from, msg, sock);
+        }
+      }
+    });
+
+    // Appels entrants : le bot ne peut pas décrocher → on émet un "appel manqué".
+    sock.ev.on('call', (calls) => {
+      for (const call of calls) {
+        if (call.status === 'offer' && !call.isGroup && call.from) {
+          this.emitter.emit('missedCall', companyId, call.from);
         }
       }
     });
@@ -227,6 +255,31 @@ export class WhatsappService implements OnModuleDestroy {
         }
       }
     });
+  }
+
+  private async handleAudio(
+    companyId: string,
+    from: string,
+    msg: WAMessage,
+    sock: WASocket,
+  ): Promise<void> {
+    try {
+      const buffer = (await downloadMediaMessage(
+        msg,
+        'buffer',
+        {},
+        {
+          logger: silentLogger as unknown as never,
+          reuploadRequest: sock.updateMediaMessage,
+        },
+      )) as Buffer;
+      const mimetype = msg.message?.audioMessage?.mimetype ?? 'audio/ogg';
+      this.emitter.emit('inboundAudio', companyId, from, buffer, mimetype);
+    } catch (err) {
+      this.logger.error(
+        `Échec du téléchargement de la note vocale : ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   private async markConnected(companyId: string, phone: string | null): Promise<void> {

@@ -52,6 +52,8 @@ export const proto = {
 
 export const makeCacheableSignalKeyStore = (store: any) => store;
 
+export const downloadMediaMessage = async (): Promise<Buffer> => Buffer.from('');
+
 export const fetchLatestBaileysVersion = async () => ({
   version: [2, 3000, 0] as [number, number, number],
   isLatest: true,
