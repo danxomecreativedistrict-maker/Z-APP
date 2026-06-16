@@ -3,7 +3,15 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogOut, MessageSquare, Package, Settings, ShoppingBag, Users } from 'lucide-react';
+import {
+  LogOut,
+  MessageCircle,
+  MessageSquare,
+  Package,
+  Settings,
+  ShoppingBag,
+  Users,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/lib/auth-context';
@@ -44,7 +52,13 @@ export default function DashboardPage() {
             Plan {user.plan} · {user.email}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="accent" asChild>
+            <Link href="/whatsapp">
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp
+            </Link>
+          </Button>
           <Button variant="outline" asChild>
             <Link href="/settings">
               <Settings className="h-4 w-4" />

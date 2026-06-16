@@ -6,6 +6,7 @@ import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { CompanyModule } from './company/company.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { CompanyModule } from './company/company.module';
     HealthModule,
     AuthModule,
     CompanyModule,
+    WhatsappModule,
   ],
 })
 export class AppModule {}

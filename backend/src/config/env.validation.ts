@@ -27,6 +27,9 @@ export const envSchema = z.object({
   OTP_TTL_SECONDS: z.coerce.number().int().positive().default(600),
   REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(604800),
 
+  // WhatsApp (Module 4) — clé de chiffrement des sessions Baileys stockées dans Redis
+  WHATSAPP_ENC_SECRET: z.string().min(8).default('zapp-dev-whatsapp-encryption-secret-change-me'),
+
   // IA (Module 6)
   ANTHROPIC_API_KEY: z.string().optional(),
 

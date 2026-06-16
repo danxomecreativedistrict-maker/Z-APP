@@ -54,6 +54,7 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   acceptTerms: () => Promise<void>;
   authFetch: <T>(path: string, options?: RequestInit) => Promise<ApiResponse<T>>;
+  getToken: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -194,9 +195,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(res.data);
   }, [authFetch]);
 
+  const getToken = useCallback(() => accessTokenRef.current, []);
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, register, verifyOtp, resendOtp, login, logout, acceptTerms, authFetch }}
+      value={{
+        user,
+        loading,
+        register,
+        verifyOtp,
+        resendOtp,
+        login,
+        logout,
+        acceptTerms,
+        authFetch,
+        getToken,
+      }}
     >
       {children}
     </AuthContext.Provider>

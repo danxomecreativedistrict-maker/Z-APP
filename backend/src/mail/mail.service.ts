@@ -43,6 +43,32 @@ export class MailService {
     this.logger.log(`OTP envoyé à ${to}`);
   }
 
+  async sendWhatsappDisconnectedEmail(to: string, companyName: string): Promise<void> {
+    const subject = '⚠️ Votre WhatsApp Z-APP est déconnecté';
+    if (!this.resend) {
+      this.logger.log(`📧 [DEV ALERTE] WhatsApp déconnecté pour ${companyName} → ${to}`);
+      return;
+    }
+    const { error } = await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject,
+      html: `
+        <div style="font-family: Inter, Arial, sans-serif; max-width: 480px; margin: auto; padding: 32px;">
+          <h1 style="color: #1B4FD8;">Z-APP</h1>
+          <p>La connexion WhatsApp de <strong>${companyName}</strong> a été interrompue.</p>
+          <p>NOVA ne peut plus recevoir ni répondre aux messages de vos prospects.</p>
+          <p style="color:#FF6B2B;font-weight:600;">Reconnectez votre WhatsApp depuis votre tableau de bord Z-APP.</p>
+        </div>
+      `,
+    });
+    if (error) {
+      this.logger.error(`Échec de l'alerte de déconnexion à ${to} : ${error.message}`);
+      return;
+    }
+    this.logger.log(`Alerte de déconnexion WhatsApp envoyée à ${to}`);
+  }
+
   private otpTemplate(code: string): string {
     return `
       <div style="font-family: Inter, Arial, sans-serif; max-width: 480px; margin: auto; padding: 32px; background: #F8FAFF; border-radius: 12px;">

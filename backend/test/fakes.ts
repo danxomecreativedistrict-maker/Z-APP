@@ -6,6 +6,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
 import { MailService } from '../src/mail/mail.service';
 import { CloudinaryService } from '../src/cloudinary/cloudinary.service';
+import { WhatsappService, WhatsappStatusPayload } from '../src/whatsapp/whatsapp.service';
 
 interface UserCreateData {
   email: string;
@@ -186,6 +187,28 @@ export class FakeCloudinary {
   }
 }
 
+export class FakeWhatsapp {
+  onStatus(): void {
+    // no-op pour les tests
+  }
+  async resolveCompanyId(): Promise<string> {
+    return 'company-e2e';
+  }
+  async getQr(): Promise<WhatsappStatusPayload> {
+    return { status: 'CONNECTING', qr: 'data:image/png;base64,AAAA' };
+  }
+  async getStatus(): Promise<WhatsappStatusPayload> {
+    return { status: 'DISCONNECTED', phone: null };
+  }
+  async logout(): Promise<WhatsappStatusPayload> {
+    return { status: 'DISCONNECTED' };
+  }
+
+  asService(): WhatsappService {
+    return this as unknown as WhatsappService;
+  }
+}
+
 export function makeConfig(): ConfigService {
   const values: Record<string, string | number> = {
     JWT_ACCESS_TTL: '15m',
@@ -194,6 +217,7 @@ export function makeConfig(): ConfigService {
     REFRESH_TTL_SECONDS: 604800,
     JWT_ACCESS_SECRET: 'test-access-secret-0123456789',
     JWT_REFRESH_SECRET: 'test-refresh-secret-0123456789',
+    WHATSAPP_ENC_SECRET: 'test-whatsapp-encryption-secret',
     NODE_ENV: 'test',
   };
   return {
