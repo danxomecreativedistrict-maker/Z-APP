@@ -83,6 +83,7 @@ export class KnowledgeService {
         data: { companyId, type: KBType.PRODUCT, title: product.name, content },
       });
       await this.embedItem(item.id, `${product.name}\n${content}`);
+      await this.upsertCatalogProduct(companyId, product);
       imported += 1;
     }
     this.logger.log(`${imported} produit(s) importé(s) pour l'entreprise ${companyId}`);
@@ -154,6 +155,35 @@ export class KnowledgeService {
 
   private toVector(embedding: number[]): string {
     return `[${embedding.join(',')}]`;
+  }
+
+  /** Crée/met à jour l'entrée catalogue (Product) — utilisée par les commandes (Module 7). */
+  private async upsertCatalogProduct(companyId: string, product: ProductRowDto): Promise<void> {
+    const existing = await this.prisma.product.findFirst({
+      where: { companyId, name: product.name },
+    });
+    if (existing) {
+      await this.prisma.product.update({
+        where: { id: existing.id },
+        data: {
+          description: product.description ?? existing.description,
+          price: product.price ?? existing.price,
+          unit: product.unit ?? existing.unit,
+          stock: product.stock ?? existing.stock,
+        },
+      });
+    } else {
+      await this.prisma.product.create({
+        data: {
+          companyId,
+          name: product.name,
+          description: product.description ?? '',
+          price: product.price ?? 0,
+          unit: product.unit ?? 'unité',
+          stock: product.stock ?? null,
+        },
+      });
+    }
   }
 
   private formatProduct(product: ProductRowDto): string {

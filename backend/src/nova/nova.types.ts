@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const NOVA_INTENTS = [
   'ORDER_INTENT',
+  'ORDER_CONFIRMED',
   'HUMAN_REQUEST',
   'PRICE_QUERY',
   'INFO_QUERY',
@@ -19,9 +20,9 @@ export const NovaReplySchema = z.object({
     .boolean()
     .describe('true si le gérant doit être notifié (info manquante, etc.).'),
   orderData: z
-    .string()
+    .unknown()
     .nullable()
-    .describe('Récapitulatif de commande si une commande est en cours, sinon null.'),
+    .describe('Données structurées de la commande quand ORDER_CONFIRMED, sinon null.'),
 });
 
 export type NovaReply = z.infer<typeof NovaReplySchema>;

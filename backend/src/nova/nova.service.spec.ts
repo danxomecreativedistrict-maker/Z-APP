@@ -1,5 +1,6 @@
 import { FakeAnthropic, FakePrisma } from '../../test/fakes';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { OrderService } from '../orders/order.service';
 import { NovaService } from './nova.service';
 
 describe('NovaService', () => {
@@ -17,7 +18,8 @@ describe('NovaService', () => {
     anthropic = new FakeAnthropic();
     const company = await prisma.company.create({ data: { userId: 'u1', name: 'PME Test' } });
     companyId = company.id;
-    service = new NovaService(prisma.asService(), fakeKnowledge, anthropic.asService());
+    const orders = new OrderService(prisma.asService());
+    service = new NovaService(prisma.asService(), fakeKnowledge, anthropic.asService(), orders);
   });
 
   it('persiste le prospect, la conversation et renvoie la réponse de NOVA', async () => {
@@ -44,6 +46,31 @@ describe('NovaService', () => {
     });
     expect(prospect?.score).toBe('HOT');
     expect(prospect?.status).toBe('INTERESTED');
+  });
+
+  it('ORDER_CONFIRMED crée la commande (ref CMD-) et passe le prospect ORDERED', async () => {
+    anthropic.nextReply = {
+      message: 'Parfait, je confirme votre commande !',
+      intent: 'ORDER_CONFIRMED',
+      notifyManager: true,
+      orderData: {
+        customerName: 'Awa',
+        deliveryAddress: 'Cotonou, Akpakpa',
+        items: [{ name: 'Sac à dos', quantity: 2, unitPrice: 25000 }],
+      },
+    };
+    const result = await service.handleIncomingMessage(
+      companyId,
+      '22996@s.whatsapp.net',
+      'Oui je confirme',
+    );
+    expect(result.intent).toBe('ORDER_CONFIRMED');
+    expect(result.reply).toMatch(/CMD-\d{4}-\d{4}/);
+    const prospect = await prisma.prospect.findFirst({
+      where: { companyId, phone: '22996@s.whatsapp.net' },
+    });
+    expect(prospect?.score).toBe('HOT');
+    expect(prospect?.status).toBe('ORDERED');
   });
 
   it('HUMAN_REQUEST passe la conversation en WAITING_HUMAN', async () => {

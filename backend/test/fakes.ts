@@ -9,7 +9,11 @@ import {
   Message,
   Notification,
   NotifType,
+  Order,
+  OrderItem,
+  OrderStatus,
   Plan,
+  Product,
   Prospect,
   ProspectScore,
   ProspectStatus,
@@ -311,6 +315,100 @@ export class FakePrisma {
       };
       this.notifications.push(notification);
       return notification;
+    },
+  };
+
+  private products: Product[] = [];
+  private orders: Order[] = [];
+  private orderItems: OrderItem[] = [];
+
+  product = {
+    findFirst: async (args: {
+      where: { companyId: string; name: string };
+    }): Promise<Product | null> => {
+      return (
+        this.products.find(
+          (p) => p.companyId === args.where.companyId && p.name === args.where.name,
+        ) ?? null
+      );
+    },
+    create: async (args: {
+      data: {
+        companyId: string;
+        name: string;
+        description: string;
+        price: number;
+        unit?: string;
+        stock?: number | null;
+      };
+    }): Promise<Product> => {
+      const product: Product = {
+        id: randomUUID(),
+        companyId: args.data.companyId,
+        name: args.data.name,
+        description: args.data.description,
+        price: args.data.price,
+        unit: args.data.unit ?? 'unité',
+        stock: args.data.stock ?? null,
+        imageUrl: null,
+        variants: null,
+        active: true,
+        createdAt: new Date(),
+      };
+      this.products.push(product);
+      return product;
+    },
+    update: async (args: { where: { id: string }; data: Partial<Product> }): Promise<Product> => {
+      const product = this.products.find((p) => p.id === args.where.id);
+      if (!product) throw new Error('Product introuvable');
+      Object.assign(product, args.data);
+      return product;
+    },
+  };
+
+  order = {
+    create: async (args: {
+      data: {
+        companyId: string;
+        prospectId: string;
+        ref: string;
+        total: number;
+        status: OrderStatus;
+        deliveryAddress?: string | null;
+      };
+    }): Promise<Order> => {
+      const order: Order = {
+        id: randomUUID(),
+        companyId: args.data.companyId,
+        prospectId: args.data.prospectId,
+        ref: args.data.ref,
+        total: args.data.total,
+        status: args.data.status,
+        deliveryAddress: args.data.deliveryAddress ?? null,
+        delivererId: null,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.orders.push(order);
+      return order;
+    },
+    count: async (): Promise<number> => this.orders.length,
+  };
+
+  orderItem = {
+    create: async (args: {
+      data: {
+        orderId: string;
+        productId: string;
+        quantity: number;
+        unitPrice: number;
+        total: number;
+      };
+    }): Promise<OrderItem> => {
+      const item: OrderItem = { id: randomUUID(), ...args.data };
+      this.orderItems.push(item);
+      return item;
     },
   };
 

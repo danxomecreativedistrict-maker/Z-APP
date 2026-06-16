@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { OrderService } from '../orders/order.service';
 import { AnthropicService } from './anthropic.service';
 import { buildNovaSystemPrompt } from './nova.prompt';
 import { NovaIntent, NovaReply, NovaTurn } from './nova.types';
@@ -32,6 +33,7 @@ export class NovaService {
     private readonly prisma: PrismaService,
     private readonly knowledge: KnowledgeService,
     private readonly anthropic: AnthropicService,
+    private readonly orders: OrderService,
   ) {}
 
   /**
@@ -74,18 +76,27 @@ export class NovaService {
     // 5. Génération Claude (JSON strict)
     const reply: NovaReply = await this.anthropic.generateNovaReply(system, turns);
 
-    // 6. Réponse NOVA persistée
+    // 6. Commande confirmée → création de l'Order (Module 7) + complément de message
+    let finalMessage = reply.message;
+    if (reply.intent === 'ORDER_CONFIRMED') {
+      const order = await this.orders.createFromNova(companyId, prospect, reply.orderData);
+      if (order) {
+        finalMessage = `${reply.message}\n\n✅ Votre commande ${order.ref} est confirmée. Merci pour votre confiance !`;
+      }
+    }
+
+    // 7. Réponse NOVA persistée
     await this.prisma.message.create({
-      data: { conversationId: conversation.id, sender: Sender.NOVA, content: reply.message },
+      data: { conversationId: conversation.id, sender: Sender.NOVA, content: finalMessage },
     });
 
-    // 7. Scoring + statut selon l'intention
+    // 8. Scoring + statut selon l'intention
     await this.applyIntent(conversation.id, prospect, reply);
 
     this.logger.log(
       `NOVA → ${prospectPhone} (intent=${reply.intent}, notifyManager=${reply.notifyManager})`,
     );
-    return { reply: reply.message, intent: reply.intent, conversationId: conversation.id };
+    return { reply: finalMessage, intent: reply.intent, conversationId: conversation.id };
   }
 
   /** Appel WhatsApp manqué : envoie un message d'accueil automatique + notifie le gérant. */
@@ -160,7 +171,10 @@ export class NovaService {
     let score: ProspectScore = prospect.score;
     let status: ProspectStatus = prospect.status;
 
-    if (reply.intent === 'ORDER_INTENT') {
+    if (reply.intent === 'ORDER_CONFIRMED') {
+      score = ProspectScore.HOT;
+      status = ProspectStatus.ORDERED;
+    } else if (reply.intent === 'ORDER_INTENT') {
       score = ProspectScore.HOT;
       status = ProspectStatus.INTERESTED;
     } else if (reply.intent === 'PRICE_QUERY') {
