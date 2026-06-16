@@ -1,0 +1,273 @@
+// Z-APP — Schéma de données complet (NOVA)
+// Base : PostgreSQL (Neon) + extension pgvector (activée par migration pour le Module 5 RAG).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  verified     Boolean   @default(false)
+  plan         Plan      @default(STARTER)
+  createdAt    DateTime  @default(now())
+  companies    Company[]
+
+  // Acceptation des CGU / politique de confidentialité (niveau compte, à l'inscription)
+  termsAcceptedAt   DateTime?
+  privacyAcceptedAt DateTime?
+  termsVersion      String?
+  marketingEmails   Boolean   @default(false)
+}
+
+model Company {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  name            String
+  sector          String?
+  city            String?
+  country         String           @default("BJ")
+  ownerPhone      String
+  managerPhone    String
+  logoUrl         String?
+  novaName        String           @default("NOVA")
+  novaTone        String           @default("semi-formal")
+  novaLanguage    String           @default("fr")
+  welcomeMessage  String?
+  createdAt       DateTime         @default(now())
+
+  // Politique commerciale (utilisée par NOVA)
+  deliveryPolicy String?
+  paymentPolicy  String?
+  deliveryZones  String[]
+  deliveryDelay  String?
+
+  // Notifications
+  alertPhone       String?
+  delivererPhone   String?
+  dailySummaryTime String  @default("20:00")
+  dailySummaryOn   Boolean @default(true)
+
+  // Onboarding
+  onboardingDone Boolean @default(false)
+
+  whatsappSession WhatsAppSession?
+  products        Product[]
+  knowledgeItems  KnowledgeItem[]
+  conversations   Conversation[]
+  prospects       Prospect[]
+  orders          Order[]
+  deliverers      Deliverer[]
+  notifications   Notification[]
+}
+
+model WhatsAppSession {
+  id          String    @id @default(cuid())
+  companyId   String    @unique
+  company     Company   @relation(fields: [companyId], references: [id])
+  phone       String?
+  status      WAStatus  @default(DISCONNECTED)
+  sessionData Json?
+  connectedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  companyId   String
+  company     Company     @relation(fields: [companyId], references: [id])
+  name        String
+  description String
+  price       Float
+  unit        String      @default("unité")
+  stock       Int?
+  imageUrl    String?
+  variants    Json?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  orderItems  OrderItem[]
+}
+
+model KnowledgeItem {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  type       KBType
+  title      String
+  content    String
+  sourceFile String?
+  embedding  Float[]
+  createdAt  DateTime @default(now())
+}
+
+model Conversation {
+  id            String     @id @default(cuid())
+  companyId     String
+  company       Company    @relation(fields: [companyId], references: [id])
+  prospectId    String?
+  prospect      Prospect?  @relation(fields: [prospectId], references: [id])
+  prospectPhone String
+  status        ConvStatus @default(ACTIVE)
+  startedAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  messages      Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  sender         Sender
+  content        String
+  type           MsgType      @default(TEXT)
+  sentAt         DateTime     @default(now())
+}
+
+model Prospect {
+  id            String         @id @default(cuid())
+  companyId     String
+  company       Company        @relation(fields: [companyId], references: [id])
+  phone         String
+  name          String?
+  email         String?
+  score         ProspectScore  @default(COLD)
+  status        ProspectStatus @default(NEW)
+  lastContact   DateTime?
+  createdAt     DateTime       @default(now())
+  conversations Conversation[]
+  orders        Order[]
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  companyId       String
+  company         Company     @relation(fields: [companyId], references: [id])
+  prospectId      String
+  prospect        Prospect    @relation(fields: [prospectId], references: [id])
+  ref             String      @unique
+  items           OrderItem[]
+  total           Float
+  status          OrderStatus @default(PENDING)
+  deliveryAddress String?
+  delivererId     String?
+  deliverer       Deliverer?  @relation(fields: [delivererId], references: [id])
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Float
+  total     Float
+}
+
+model Deliverer {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+  name      String
+  phone     String
+  zone      String?
+  active    Boolean @default(true)
+  orders    Order[]
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id])
+  type      NotifType
+  recipient String
+  content   String
+  sent      Boolean   @default(false)
+  read      Boolean   @default(false)
+  sentAt    DateTime  @default(now())
+}
+
+enum Plan {
+  STARTER
+  BUSINESS
+  PRO
+  ENTERPRISE
+}
+
+enum WAStatus {
+  CONNECTED
+  DISCONNECTED
+  CONNECTING
+}
+
+enum KBType {
+  PRODUCT
+  FAQ
+  POLICY
+  SCRIPT
+  DOCUMENT
+}
+
+enum ConvStatus {
+  ACTIVE
+  WAITING_HUMAN
+  CLOSED
+}
+
+enum Sender {
+  NOVA
+  HUMAN
+  PROSPECT
+}
+
+enum MsgType {
+  TEXT
+  IMAGE
+  AUDIO
+  DOCUMENT
+  BUTTON
+}
+
+enum ProspectScore {
+  HOT
+  WARM
+  COLD
+}
+
+enum ProspectStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  ORDERED
+  LOST
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  DELIVERING
+  DELIVERED
+  CANCELLED
+}
+
+enum NotifType {
+  SALE
+  DELIVERY
+  TRANSFER
+  DAILY_SUMMARY
+  MISSED_CALL
+}

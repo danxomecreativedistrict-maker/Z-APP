@@ -1,0 +1,47 @@
+# docker-compose.yml — Z-APP
+# Alternative LOCALE (PostgreSQL 15 + pgvector + Redis).
+# En développement, Z-APP utilise par défaut Neon (PostgreSQL + pgvector) et Upstash (Redis) :
+# il suffit de renseigner DATABASE_URL / DIRECT_URL / REDIS_URL dans backend/.env.
+# Ce fichier permet de tout faire tourner localement si Docker est installé :
+#   docker compose up -d
+# puis dans backend/.env :
+#   DATABASE_URL="postgresql://postgres:password@localhost:5432/zapp?schema=public"
+#   DIRECT_URL="postgresql://postgres:password@localhost:5432/zapp?schema=public"
+#   REDIS_URL="redis://localhost:6379"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: zapp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: zapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - zapp_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: zapp-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - zapp_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  zapp_postgres_data:
+  zapp_redis_data:

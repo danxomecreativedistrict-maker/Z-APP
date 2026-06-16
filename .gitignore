@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environnement (ne jamais commiter les vraies valeurs)
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+
+# Builds
+dist/
+build/
+.next/
+out/
+
+# Prisma
+backend/prisma/*.db
+
+# Baileys / sessions WhatsApp
+auth_info_baileys/
+*.session
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Tests
+coverage/
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Divers
+*.tsbuildinfo
