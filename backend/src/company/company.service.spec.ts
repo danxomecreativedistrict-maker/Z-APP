@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { FakeCloudinary, FakePrisma } from '../../test/fakes';
+import { FakePrisma, FakeUploadthing } from '../../test/fakes';
 import { CompanyService } from './company.service';
 
 describe('CompanyService', () => {
@@ -13,7 +13,7 @@ describe('CompanyService', () => {
 
   beforeEach(() => {
     prisma = new FakePrisma();
-    service = new CompanyService(prisma.asService(), new FakeCloudinary().asService());
+    service = new CompanyService(prisma.asService(), new FakeUploadthing().asService());
   });
 
   it('create crée une fiche (pays par défaut BJ) puis refuse un doublon', async () => {

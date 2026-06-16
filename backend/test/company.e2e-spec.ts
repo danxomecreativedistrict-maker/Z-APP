@@ -15,8 +15,8 @@ import { ResponseInterceptor } from '../src/common/interceptors/response.interce
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
 import { MailService } from '../src/mail/mail.service';
-import { CloudinaryService } from '../src/cloudinary/cloudinary.service';
-import { FakeCloudinary, FakeMail, FakePrisma, FakeRedis } from './fakes';
+import { UploadthingService } from '../src/uploadthing/uploadthing.service';
+import { FakeMail, FakePrisma, FakeRedis, FakeUploadthing } from './fakes';
 
 describe('Company (e2e)', () => {
   let app: INestApplication;
@@ -31,8 +31,8 @@ describe('Company (e2e)', () => {
       .useValue(new FakeRedis().asService())
       .overrideProvider(MailService)
       .useValue(mail.asService())
-      .overrideProvider(CloudinaryService)
-      .useValue(new FakeCloudinary().asService())
+      .overrideProvider(UploadthingService)
+      .useValue(new FakeUploadthing().asService())
       .compile();
 
     app = moduleRef.createNestApplication();

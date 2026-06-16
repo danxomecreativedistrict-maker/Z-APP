@@ -37,10 +37,8 @@ export const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   FROM_EMAIL: z.string().default('nova@z-app.com'),
 
-  // Fichiers (Module 3)
-  CLOUDINARY_CLOUD_NAME: z.string().optional(),
-  CLOUDINARY_API_KEY: z.string().optional(),
-  CLOUDINARY_API_SECRET: z.string().optional(),
+  // Fichiers (Module 3) — UploadThing (remplace Cloudinary)
+  UPLOADTHING_TOKEN: z.string().optional(),
 
   // App
   FRONTEND_URL: z.string().default('http://localhost:3000'),

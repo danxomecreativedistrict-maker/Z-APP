@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Company } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { UploadthingService } from '../uploadthing/uploadthing.service';
 import {
   CreateCompanyDto,
   UpdateCompanyDto,
@@ -29,7 +29,7 @@ export interface NovaConfig {
 export class CompanyService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cloudinary: CloudinaryService,
+    private readonly upload: UploadthingService,
   ) {}
 
   /** Récupère la fiche de l'utilisateur courant (isolation stricte par userId). */
@@ -108,7 +108,7 @@ export class CompanyService {
       throw new BadRequestException('Le logo ne doit pas dépasser 2 Mo.');
     }
     const company = await this.getMine(userId);
-    const logoUrl = await this.cloudinary.uploadLogo(company.id, file);
+    const logoUrl = await this.upload.uploadLogo(company.id, file);
     return this.prisma.company.update({ where: { id: company.id }, data: { logoUrl } });
   }
 }

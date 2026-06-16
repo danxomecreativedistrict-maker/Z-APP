@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
 import { MailService } from '../src/mail/mail.service';
-import { CloudinaryService } from '../src/cloudinary/cloudinary.service';
+import { UploadthingService } from '../src/uploadthing/uploadthing.service';
 import { WhatsappService, WhatsappStatusPayload } from '../src/whatsapp/whatsapp.service';
 
 interface UserCreateData {
@@ -177,13 +177,13 @@ export class FakeMail {
   }
 }
 
-export class FakeCloudinary {
+export class FakeUploadthing {
   async uploadLogo(companyId: string): Promise<string> {
-    return `https://fake.cdn/z-app/${companyId}/logos/logo.webp`;
+    return `https://fake.utfs.io/z-app/${companyId}/logos/logo.webp`;
   }
 
-  asService(): CloudinaryService {
-    return this as unknown as CloudinaryService;
+  asService(): UploadthingService {
+    return this as unknown as UploadthingService;
   }
 }
 

@@ -10,10 +10,10 @@ Intelligent** nommé **NOVA** (Claude `claude-sonnet-4-6` + RAG + WhatsApp).
 | Frontend     | Next.js 14 (App Router) · Tailwind CSS · shadcn/ui       |
 | Backend      | NestJS · TypeScript (strict)                             |
 | Base données | PostgreSQL + Prisma + **pgvector** · Redis               |
-| IA           | Anthropic Claude API (`claude-sonnet-4-6`) · RAG pgvector |
+| IA           | Anthropic Claude (`claude-sonnet-4-6`) · OpenAI embeddings · RAG pgvector |
 | WhatsApp     | Baileys (QR code)                                        |
 | Auth         | JWT (access 15 min + refresh 7 j) · OTP email (Resend)   |
-| Fichiers     | Cloudinary                                               |
+| Fichiers     | UploadThing                                              |
 | Emails       | Resend                                                   |
 | Tests        | Jest · Supertest                                         |
 
