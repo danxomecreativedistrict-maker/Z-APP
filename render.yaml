@@ -1,0 +1,48 @@
+# Blueprint Render — déploiement du backend NestJS de Z-APP.
+# Render > New > Blueprint > connecter le repo : ce fichier crée le service "zapp-api".
+# Les variables `sync: false` sont à renseigner dans le dashboard Render (valeurs de backend/.env).
+services:
+  - type: web
+    name: zapp-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    region: frankfurt
+    # NODE_ENV=production fait omettre les devDependencies par npm : on force --include=dev
+    # car nest build, prisma et typescript en font partie.
+    buildCommand: npm install --include=dev && npx prisma generate && npm run build
+    startCommand: node dist/main.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      # Secrets générés automatiquement par Render (sessions/JWT propres au déploiement)
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: WHATSAPP_ENC_SECRET
+        generateValue: true
+      # À renseigner dans le dashboard (valeurs de backend/.env)
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      - key: UPLOADTHING_TOKEN
+        sync: false
+      # URL du frontend Vercel (pour CORS) — à renseigner APRÈS le déploiement Vercel
+      - key: FRONTEND_URL
+        sync: false

@@ -236,15 +236,22 @@ export class AuthService {
   private setRefreshCookie(res: Response, token: string): void {
     res.cookie(REFRESH_COOKIE, token, {
       httpOnly: true,
+      // En prod le frontend (Vercel) et l'API (Render) sont sur des domaines différents :
+      // le cookie cross-site exige SameSite=None + Secure.
       secure: this.isProd,
-      sameSite: 'lax',
+      sameSite: this.isProd ? 'none' : 'lax',
       path: REFRESH_COOKIE_PATH,
       maxAge: this.refreshTtlSeconds * 1000,
     });
   }
 
   private clearRefreshCookie(res: Response): void {
-    res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+    res.clearCookie(REFRESH_COOKIE, {
+      path: REFRESH_COOKIE_PATH,
+      httpOnly: true,
+      secure: this.isProd,
+      sameSite: this.isProd ? 'none' : 'lax',
+    });
   }
 
   private generateOtp(): string {

@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Z-APP — API NestJS (NOVA)",
   "private": true,
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "build": "nest build",
     "start": "nest start",
