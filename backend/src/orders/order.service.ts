@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotifType, Order, OrderStatus, Product } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { OrderDataSchema } from './order.types';
 
 export interface ProspectRef {
@@ -12,7 +13,10 @@ export interface ProspectRef {
 export class OrderService {
   private readonly logger = new Logger(OrderService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   /**
    * Crée une commande CONFIRMED à partir des données structurées de NOVA.
@@ -64,16 +68,12 @@ export class OrderService {
       });
     }
 
-    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
-    await this.prisma.notification.create({
-      data: {
-        companyId,
-        type: NotifType.SALE,
-        recipient: company?.managerPhone || company?.alertPhone || '',
-        content: `🎉 Nouvelle vente ${ref} — ${total} FCFA — prospect ${prospect.phone}${
-          data.deliveryAddress ? ` — livraison : ${data.deliveryAddress}` : ''
-        }.`,
-      },
+    await this.notifications.notify({
+      companyId,
+      type: NotifType.SALE,
+      content: `🎉 Nouvelle vente ${ref} — ${total} FCFA — prospect ${prospect.phone}${
+        data.deliveryAddress ? ` — livraison : ${data.deliveryAddress}` : ''
+      }.`,
     });
 
     this.logger.log(`Commande ${ref} créée (${total} FCFA) pour l'entreprise ${companyId}`);

@@ -96,6 +96,21 @@ export class WhatsappService implements OnModuleDestroy {
     await sock.sendMessage(to, { text });
   }
 
+  /** Envoie une note vocale (ptt) à un prospect — réponse vocale de NOVA. */
+  async sendVoice(
+    companyId: string,
+    to: string,
+    audio: Buffer,
+    mimetype = 'audio/ogg; codecs=opus',
+  ): Promise<void> {
+    const sock = this.sockets.get(companyId);
+    if (!sock) {
+      this.logger.warn(`Aucune session WhatsApp active pour l'entreprise ${companyId}`);
+      return;
+    }
+    await sock.sendMessage(to, { audio, mimetype, ptt: true });
+  }
+
   /** Résout l'entreprise de l'utilisateur (isolation par userId). */
   async resolveCompanyId(userId: string): Promise<string> {
     const company = await this.prisma.company.findFirst({ where: { userId } });

@@ -1,4 +1,5 @@
-import { FakePrisma } from '../../test/fakes';
+import { FakePrisma, FakeWhatsapp } from '../../test/fakes';
+import { NotificationsService } from '../notifications/notifications.service';
 import { OrderService } from './order.service';
 
 describe('OrderService', () => {
@@ -9,7 +10,11 @@ describe('OrderService', () => {
 
   beforeEach(async () => {
     prisma = new FakePrisma();
-    service = new OrderService(prisma.asService());
+    const notifications = new NotificationsService(
+      prisma.asService(),
+      new FakeWhatsapp().asService(),
+    );
+    service = new OrderService(prisma.asService(), notifications);
     const company = await prisma.company.create({
       data: { userId: 'u1', name: 'PME Test', managerPhone: '22990000000' },
     });

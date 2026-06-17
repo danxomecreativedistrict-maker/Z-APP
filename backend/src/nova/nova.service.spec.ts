@@ -1,6 +1,7 @@
-import { FakeAnthropic, FakePrisma } from '../../test/fakes';
+import { FakeAnthropic, FakePrisma, FakeWhatsapp } from '../../test/fakes';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { OrderService } from '../orders/order.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { NovaService } from './nova.service';
 
 describe('NovaService', () => {
@@ -18,8 +19,18 @@ describe('NovaService', () => {
     anthropic = new FakeAnthropic();
     const company = await prisma.company.create({ data: { userId: 'u1', name: 'PME Test' } });
     companyId = company.id;
-    const orders = new OrderService(prisma.asService());
-    service = new NovaService(prisma.asService(), fakeKnowledge, anthropic.asService(), orders);
+    const notifications = new NotificationsService(
+      prisma.asService(),
+      new FakeWhatsapp().asService(),
+    );
+    const orders = new OrderService(prisma.asService(), notifications);
+    service = new NovaService(
+      prisma.asService(),
+      fakeKnowledge,
+      anthropic.asService(),
+      orders,
+      notifications,
+    );
   });
 
   it('persiste le prospect, la conversation et renvoie la réponse de NOVA', async () => {

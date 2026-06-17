@@ -12,6 +12,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { OrderService } from '../orders/order.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AnthropicService } from './anthropic.service';
 import { buildNovaSystemPrompt } from './nova.prompt';
 import { NovaIntent, NovaReply, NovaTurn } from './nova.types';
@@ -34,6 +35,7 @@ export class NovaService {
     private readonly knowledge: KnowledgeService,
     private readonly anthropic: AnthropicService,
     private readonly orders: OrderService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -117,13 +119,10 @@ export class NovaService {
       where: { id: prospect.id },
       data: { status: ProspectStatus.CONTACTED, lastContact: new Date() },
     });
-    await this.prisma.notification.create({
-      data: {
-        companyId,
-        type: NotifType.MISSED_CALL,
-        recipient: company.alertPhone || company.managerPhone || '',
-        content: `Appel manqué du prospect ${prospectPhone}.`,
-      },
+    await this.notifications.notify({
+      companyId,
+      type: NotifType.MISSED_CALL,
+      content: `📞 Appel manqué du prospect ${prospectPhone}. NOVA a envoyé un message d'accueil automatique.`,
     });
 
     this.logger.log(`Appel manqué de ${prospectPhone} → réponse automatique de NOVA envoyée.`);
@@ -202,14 +201,14 @@ export class NovaService {
   }
 
   private async createManagerNotification(prospect: Prospect, reply: NovaReply): Promise<void> {
-    const company = await this.prisma.company.findUnique({ where: { id: prospect.companyId } });
-    const recipient = company?.alertPhone || company?.managerPhone || '';
     const content =
       reply.intent === 'HUMAN_REQUEST'
-        ? `Le prospect ${prospect.phone} demande à parler à un humain.`
-        : `NOVA a besoin d'une vérification (prix/disponibilité) pour le prospect ${prospect.phone}.`;
-    await this.prisma.notification.create({
-      data: { companyId: prospect.companyId, type: NotifType.TRANSFER, recipient, content },
+        ? `🙋 Le prospect ${prospect.phone} demande à parler à un humain.`
+        : `🔎 NOVA a besoin d'une vérification (prix/disponibilité) pour le prospect ${prospect.phone}.`;
+    await this.notifications.notify({
+      companyId: prospect.companyId,
+      type: NotifType.TRANSFER,
+      content,
     });
   }
 }

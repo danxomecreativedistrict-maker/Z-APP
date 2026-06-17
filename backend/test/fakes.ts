@@ -131,6 +131,10 @@ export class FakePrisma {
     findUnique: async (args: { where: { id: string } }): Promise<Company | null> => {
       return this.companies.find((c) => c.id === args.where.id) ?? null;
     },
+    findMany: async (args?: { where?: { dailySummaryOn?: boolean } }): Promise<Company[]> => {
+      const on = args?.where?.dailySummaryOn;
+      return this.companies.filter((c) => (on === undefined ? true : c.dailySummaryOn === on));
+    },
     create: async (args: { data: CompanyCreateData }): Promise<Company> => {
       const company = buildCompany(args.data);
       this.companies.push(company);
@@ -238,6 +242,15 @@ export class FakePrisma {
       Object.assign(prospect, args.data);
       return prospect;
     },
+    count: async (args: {
+      where: { companyId: string; score?: ProspectScore };
+    }): Promise<number> => {
+      return this.prospects.filter(
+        (p) =>
+          p.companyId === args.where.companyId &&
+          (args.where.score ? p.score === args.where.score : true),
+      ).length;
+    },
   };
 
   conversation = {
@@ -297,6 +310,14 @@ export class FakePrisma {
     findMany: async (args: { where: { conversationId: string } }): Promise<Message[]> => {
       return this.messages.filter((m) => m.conversationId === args.where.conversationId);
     },
+    count: async (args: { where: { conversation?: { companyId?: string } } }): Promise<number> => {
+      const companyId = args.where.conversation?.companyId;
+      if (!companyId) return this.messages.length;
+      const convIds = new Set(
+        this.conversations.filter((c) => c.companyId === companyId).map((c) => c.id),
+      );
+      return this.messages.filter((m) => convIds.has(m.conversationId)).length;
+    },
   };
 
   notification = {
@@ -314,6 +335,34 @@ export class FakePrisma {
         sentAt: new Date(),
       };
       this.notifications.push(notification);
+      return notification;
+    },
+    findMany: async (args: {
+      where: { companyId: string };
+      orderBy?: unknown;
+      take?: number;
+    }): Promise<Notification[]> => {
+      const list = this.notifications
+        .filter((n) => n.companyId === args.where.companyId)
+        .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime());
+      return args.take ? list.slice(0, args.take) : list;
+    },
+    findFirst: async (args: {
+      where: { id: string; companyId: string };
+    }): Promise<Notification | null> => {
+      return (
+        this.notifications.find(
+          (n) => n.id === args.where.id && n.companyId === args.where.companyId,
+        ) ?? null
+      );
+    },
+    update: async (args: {
+      where: { id: string };
+      data: Partial<Notification>;
+    }): Promise<Notification> => {
+      const notification = this.notifications.find((n) => n.id === args.where.id);
+      if (!notification) throw new Error('Notification introuvable');
+      Object.assign(notification, args.data);
       return notification;
     },
   };
@@ -394,6 +443,17 @@ export class FakePrisma {
       return order;
     },
     count: async (): Promise<number> => this.orders.length,
+    findMany: async (args?: {
+      where?: { companyId?: string; status?: { not?: OrderStatus } };
+    }): Promise<Order[]> => {
+      const companyId = args?.where?.companyId;
+      const notStatus = args?.where?.status?.not;
+      return this.orders.filter(
+        (o) =>
+          (companyId ? o.companyId === companyId : true) &&
+          (notStatus ? o.status !== notStatus : true),
+      );
+    },
   };
 
   orderItem = {
@@ -506,6 +566,9 @@ export class FakeWhatsapp {
     // no-op pour les tests
   }
   async sendText(): Promise<void> {
+    // no-op pour les tests
+  }
+  async sendVoice(): Promise<void> {
     // no-op pour les tests
   }
   async resolveCompanyId(): Promise<string> {

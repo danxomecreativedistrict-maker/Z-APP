@@ -2,12 +2,13 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { NovaService } from './nova.service';
 import { TranscriptionService } from './transcription.service';
+import { TtsService } from './tts.service';
 
 /**
  * Relie les événements WhatsApp (Module 4) au cerveau NOVA (Module 6) :
- * - message texte → NOVA → réponse,
+ * - message texte → NOVA → réponse texte,
  * - appel manqué → message d'accueil automatique + notification gérant,
- * - note vocale → transcription Whisper → NOVA → réponse.
+ * - note vocale → transcription Whisper → NOVA → réponse VOCALE (TTS), repli texte.
  */
 @Injectable()
 export class NovaWhatsappBridge implements OnModuleInit {
@@ -17,6 +18,7 @@ export class NovaWhatsappBridge implements OnModuleInit {
     private readonly whatsapp: WhatsappService,
     private readonly nova: NovaService,
     private readonly transcription: TranscriptionService,
+    private readonly tts: TtsService,
   ) {}
 
   onModuleInit(): void {
@@ -60,7 +62,13 @@ export class NovaWhatsappBridge implements OnModuleInit {
     try {
       const text = await this.transcription.transcribe(audio, mimetype);
       const result = await this.nova.handleIncomingMessage(companyId, from, text);
-      await this.whatsapp.sendText(companyId, from, result.reply);
+      // Le prospect a parlé → NOVA répond aussi à la voix (note vocale), repli texte si TTS indispo.
+      const voice = await this.tts.synthesize(result.reply);
+      if (voice) {
+        await this.whatsapp.sendVoice(companyId, from, voice.audio, voice.mimetype);
+      } else {
+        await this.whatsapp.sendText(companyId, from, result.reply);
+      }
     } catch (err) {
       this.logger.error(`Échec note vocale : ${err instanceof Error ? err.message : String(err)}`);
     }
