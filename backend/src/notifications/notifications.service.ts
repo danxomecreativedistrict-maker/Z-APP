@@ -1,8 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Notification, NotifType, OrderStatus, ProspectScore } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { RealtimeService } from '../realtime/realtime.service';
 
 export interface NotifyInput {
   companyId: string;
@@ -79,6 +80,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsapp: WhatsappService,
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   /**
@@ -97,28 +99,29 @@ export class NotificationsService {
       },
     });
 
+    let result = notif;
     const jid = toWhatsappJid(recipient);
     if (!jid) {
       this.logger.warn(
         `Notification ${input.type} non envoyée : aucun destinataire pour l'entreprise ${input.companyId}.`,
       );
-      return notif;
+    } else {
+      try {
+        await this.whatsapp.sendText(input.companyId, jid, input.content);
+        result = await this.prisma.notification.update({
+          where: { id: notif.id },
+          data: { sent: true },
+        });
+        this.logger.log(`Notification ${input.type} envoyée au gérant (${recipient}).`);
+      } catch (err) {
+        this.logger.error(
+          `Échec d'envoi de la notification ${input.type} : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
-    try {
-      await this.whatsapp.sendText(input.companyId, jid, input.content);
-      const sent = await this.prisma.notification.update({
-        where: { id: notif.id },
-        data: { sent: true },
-      });
-      this.logger.log(`Notification ${input.type} envoyée au gérant (${recipient}).`);
-      return sent;
-    } catch (err) {
-      this.logger.error(
-        `Échec d'envoi de la notification ${input.type} : ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return notif;
-    }
+    this.realtime?.emit('notification', input.companyId, result);
+    return result;
   }
 
   async list(userId: string): Promise<Notification[]> {

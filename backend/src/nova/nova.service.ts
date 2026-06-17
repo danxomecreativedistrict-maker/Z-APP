@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import {
   Conversation,
   ConvStatus,
@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { OrderService } from '../orders/order.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { AnthropicService } from './anthropic.service';
 import { buildNovaSystemPrompt } from './nova.prompt';
 import { NovaIntent, NovaReply, NovaTurn } from './nova.types';
@@ -36,6 +37,7 @@ export class NovaService {
     private readonly anthropic: AnthropicService,
     private readonly orders: OrderService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   /**
@@ -94,6 +96,13 @@ export class NovaService {
 
     // 8. Scoring + statut selon l'intention
     await this.applyIntent(conversation.id, prospect, reply);
+
+    // 9. Temps réel (dashboard) : nouveau message traité
+    this.realtime?.emit('message', companyId, {
+      conversationId: conversation.id,
+      prospectPhone,
+      intent: reply.intent,
+    });
 
     this.logger.log(
       `NOVA → ${prospectPhone} (intent=${reply.intent}, notifyManager=${reply.notifyManager})`,
@@ -183,10 +192,11 @@ export class NovaService {
       status = ProspectStatus.CONTACTED;
     }
 
-    await this.prisma.prospect.update({
+    const updated = await this.prisma.prospect.update({
       where: { id: prospect.id },
       data: { score, status, lastContact: new Date() },
     });
+    this.realtime?.emit('prospect', updated.companyId, updated);
 
     if (reply.intent === 'HUMAN_REQUEST') {
       await this.prisma.conversation.update({

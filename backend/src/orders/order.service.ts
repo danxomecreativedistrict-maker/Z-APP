@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { NotifType, Order, OrderStatus, Product } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { OrderDataSchema } from './order.types';
 
 export interface ProspectRef {
@@ -16,6 +17,7 @@ export class OrderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   /**
@@ -76,6 +78,7 @@ export class OrderService {
       }.`,
     });
 
+    this.realtime?.emit('order', companyId, order);
     this.logger.log(`Commande ${ref} créée (${total} FCFA) pour l'entreprise ${companyId}`);
     return order;
   }

@@ -11,6 +11,8 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { NovaModule } from './nova/nova.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { RealtimeModule } from './realtime/realtime.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -20,6 +22,7 @@ import { NotificationsModule } from './notifications/notifications.module';
       envFilePath: '.env',
     }),
     ScheduleModule.forRoot(),
+    RealtimeModule,
     PrismaModule,
     RedisModule,
     HealthModule,
@@ -29,6 +32,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     KnowledgeModule,
     NovaModule,
     NotificationsModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

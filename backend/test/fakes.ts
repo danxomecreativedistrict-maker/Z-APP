@@ -251,6 +251,9 @@ export class FakePrisma {
           (args.where.score ? p.score === args.where.score : true),
       ).length;
     },
+    findMany: async (args: { where: { companyId: string } }): Promise<Prospect[]> => {
+      return this.prospects.filter((p) => p.companyId === args.where.companyId);
+    },
   };
 
   conversation = {
@@ -289,6 +292,9 @@ export class FakePrisma {
       if (!conversation) throw new Error('Conversation introuvable');
       Object.assign(conversation, args.data);
       return conversation;
+    },
+    findMany: async (args: { where: { companyId: string } }): Promise<Conversation[]> => {
+      return this.conversations.filter((c) => c.companyId === args.where.companyId);
     },
   };
 
@@ -412,6 +418,9 @@ export class FakePrisma {
       if (!product) throw new Error('Product introuvable');
       Object.assign(product, args.data);
       return product;
+    },
+    findMany: async (args: { where: { companyId: string } }): Promise<Product[]> => {
+      return this.products.filter((p) => p.companyId === args.where.companyId);
     },
   };
 
