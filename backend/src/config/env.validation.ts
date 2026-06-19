@@ -34,9 +34,11 @@ export const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
 
-  // Email (Module 2)
+  // Email (Module 2) — Resend (domaine vérifié) ou Gmail SMTP (mot de passe d'application)
   RESEND_API_KEY: z.string().optional(),
   FROM_EMAIL: z.string().default('nova@z-app.com'),
+  GMAIL_USER: z.string().optional(),
+  GMAIL_APP_PASSWORD: z.string().optional(),
 
   // Fichiers (Module 3) — UploadThing (remplace Cloudinary)
   UPLOADTHING_TOKEN: z.string().optional(),
