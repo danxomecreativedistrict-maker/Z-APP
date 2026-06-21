@@ -100,7 +100,11 @@ export class KnowledgeService {
     }
     const text = (await this.extractText(file)).replace(/\s+/g, ' ').trim();
     if (!text) {
-      throw new BadRequestException('Aucun texte exploitable extrait du fichier.');
+      throw new BadRequestException(
+        "Aucun texte exploitable n'a pu être extrait de ce fichier. " +
+          "S'il s'agit d'une photo ou d'un scan, l'import par image n'est pas encore pris en charge — " +
+          'exportez votre catalogue en PDF, Word ou CSV.',
+      );
     }
     const chunks = this.chunkText(text, 1500);
     for (let i = 0; i < chunks.length; i += 1) {

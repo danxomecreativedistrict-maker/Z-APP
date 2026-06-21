@@ -159,6 +159,13 @@ export default function KnowledgePage() {
         method: 'POST',
         body: fd,
       });
+      if (!res.data.chunks) {
+        toast(
+          "Aucun contenu exploitable n'a pu être extrait de ce document. Vérifiez le fichier.",
+          'error',
+        );
+        return;
+      }
       toast(`Document importé : ${res.data.chunks} passage(s) ajouté(s). NOVA peut s'en servir.`);
       setTab('DOCUMENT');
       void load('DOCUMENT');

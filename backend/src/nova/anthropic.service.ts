@@ -55,18 +55,23 @@ export class AnthropicService {
   }
 
   private parseReply(raw: string): NovaReply {
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
+    // Retire les éventuelles balises Markdown (```json … ```) avant d'isoler le JSON.
+    const cleaned = raw
+      .replace(/```json/gi, '')
+      .replace(/```/g, '')
+      .trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
     if (start !== -1 && end > start) {
       try {
-        const parsed = NovaReplySchema.safeParse(JSON.parse(raw.slice(start, end + 1)));
+        const parsed = NovaReplySchema.safeParse(JSON.parse(cleaned.slice(start, end + 1)));
         if (parsed.success) return parsed.data;
       } catch {
         // JSON invalide : on bascule sur le texte brut ci-dessous
       }
     }
-    if (raw.trim()) {
-      return { message: raw.trim(), intent: 'INFO_QUERY', notifyManager: false, orderData: null };
+    if (cleaned) {
+      return { message: cleaned, intent: 'INFO_QUERY', notifyManager: false, orderData: null };
     }
     return this.fallback();
   }

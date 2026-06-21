@@ -10,6 +10,11 @@ import {
   MinLength,
 } from 'class-validator';
 
+// Numéro vide accepté, sinon format international souple : +indicatif puis 8 à 20 chiffres
+// (espaces/tirets tolérés). Évite d'enregistrer des numéros que WhatsApp ne pourra pas joindre.
+export const PHONE_REGEX = /^$|^\+?\d[\d\s-]{6,18}\d$/;
+const PHONE_MESSAGE = 'Numéro invalide (format international, ex : +229 97 00 00 00).';
+
 export class CreateCompanyDto {
   @IsString()
   @MinLength(2, { message: "Le nom de l'entreprise est requis (2 caractères minimum)." })
@@ -34,11 +39,13 @@ export class CreateCompanyDto {
   @IsOptional()
   @IsString()
   @MaxLength(30)
+  @Matches(PHONE_REGEX, { message: PHONE_MESSAGE })
   ownerPhone?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(30)
+  @Matches(PHONE_REGEX, { message: PHONE_MESSAGE })
   managerPhone?: string;
 }
 
@@ -67,11 +74,13 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsString()
   @MaxLength(30)
+  @Matches(PHONE_REGEX, { message: PHONE_MESSAGE })
   ownerPhone?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(30)
+  @Matches(PHONE_REGEX, { message: PHONE_MESSAGE })
   managerPhone?: string;
 }
 
@@ -125,11 +134,13 @@ export class UpdateNotificationsDto {
   @IsOptional()
   @IsString()
   @MaxLength(30)
+  @Matches(PHONE_REGEX, { message: PHONE_MESSAGE })
   alertPhone?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(30)
+  @Matches(PHONE_REGEX, { message: PHONE_MESSAGE })
   delivererPhone?: string;
 
   @IsOptional()
