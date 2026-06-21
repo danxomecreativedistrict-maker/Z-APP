@@ -213,12 +213,21 @@ export class KnowledgeService {
   }
 
   private async extractText(file: Express.Multer.File): Promise<string> {
-    if (file.mimetype === 'application/pdf') {
+    // Certains navigateurs envoient un type MIME générique : on se rabat sur l'extension.
+    const name = (file.originalname ?? '').toLowerCase();
+    const isPdf = file.mimetype === 'application/pdf' || name.endsWith('.pdf');
+    const isWord =
+      file.mimetype === DOCX_MIME ||
+      file.mimetype === DOC_MIME ||
+      name.endsWith('.docx') ||
+      name.endsWith('.doc');
+
+    if (isPdf) {
       const pdfParse = (await import('pdf-parse')).default;
       const data = await pdfParse(file.buffer);
       return data.text;
     }
-    if (file.mimetype === DOCX_MIME || file.mimetype === DOC_MIME) {
+    if (isWord) {
       const { extractRawText } = await import('mammoth');
       const result = await extractRawText({ buffer: file.buffer });
       return result.value;

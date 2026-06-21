@@ -22,13 +22,26 @@ export const KB_TABS: { type: KBType; label: string }[] = [
   { type: 'FAQ', label: 'FAQ' },
   { type: 'POLICY', label: 'Politique' },
   { type: 'SCRIPT', label: 'Scripts' },
+  { type: 'DOCUMENT', label: 'Documents' },
 ];
+
+// Codes des caractères invisibles fréquents dans les exports Excel (BOM, zero-width).
+const INVISIBLE_CODES = [0x200b, 0x200c, 0x200d, 0xfeff];
+
+/** Nettoie un entête CSV : retire le BOM/caractères invisibles, les espaces, minuscules. */
+export function normalizeHeader(header: string): string {
+  const cleaned = Array.from(header)
+    .filter((ch) => !INVISIBLE_CODES.includes(ch.charCodeAt(0)))
+    .join('');
+  return cleaned.trim().toLowerCase();
+}
 
 /** Normalise une ligne CSV (entêtes FR/EN) vers un ProductRow. */
 export function csvRowToProduct(row: Record<string, string>): ProductRow | null {
   const get = (...keys: string[]): string | undefined => {
     for (const key of Object.keys(row)) {
-      if (keys.includes(key.trim().toLowerCase())) return row[key];
+      // .trim() seul ne retire PAS le BOM : on normalise via normalizeHeader (bug import Excel).
+      if (keys.includes(normalizeHeader(key))) return row[key];
     }
     return undefined;
   };

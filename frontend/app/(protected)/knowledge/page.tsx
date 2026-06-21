@@ -110,22 +110,24 @@ export default function KnowledgePage() {
     }
   }
 
-  function onCsvFile(e: ChangeEvent<HTMLInputElement>): void {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function parseCsvFile(file: File): void {
     Papa.parse<Record<string, string>>(file, {
       header: true,
       skipEmptyLines: true,
+      delimitersToGuess: [',', ';', '\t', '|'], // Excel FR exporte souvent en « ; »
       complete: (res) => {
-        const rows = res.data
-          .map(csvRowToProduct)
-          .filter((r): r is ProductRow => r !== null);
+        const rows = res.data.map(csvRowToProduct).filter((r): r is ProductRow => r !== null);
         if (rows.length === 0) {
-          toast('Aucune ligne valide (colonne « name/nom » requise).', 'error');
+          const cols = res.meta.fields?.join(', ') || 'aucune';
+          toast(
+            `Aucun produit détecté. Colonnes lues : ${cols}. Une colonne « nom » (ou name) est requise.`,
+            'error',
+          );
           return;
         }
         setCsvRows(rows);
       },
+      error: (err) => toast(`Erreur de lecture du CSV : ${err.message}`, 'error'),
     });
   }
 
@@ -144,6 +146,41 @@ export default function KnowledgePage() {
       toast(err instanceof Error ? err.message : 'Erreur.', 'error');
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Téléverse un document (PDF/Word) : extraction de texte côté backend → base de connaissances.
+  async function uploadDocument(file: File): Promise<void> {
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await authFetch<{ chunks: number }>('/knowledge/import-file', {
+        method: 'POST',
+        body: fd,
+      });
+      toast(`Document importé : ${res.data.chunks} passage(s) ajouté(s). NOVA peut s'en servir.`);
+      setTab('DOCUMENT');
+      void load('DOCUMENT');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Échec de l'import du document.", 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Routeur d'import : CSV → aperçu produits ; PDF/Word → extraction backend.
+  function onImportFile(e: ChangeEvent<HTMLInputElement>): void {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // autorise la re-sélection du même fichier
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext === 'csv') {
+      parseCsvFile(file);
+    } else if (ext === 'pdf' || ext === 'docx') {
+      void uploadDocument(file);
+    } else {
+      toast('Format non supporté. Formats acceptés : CSV, PDF, Word (.docx).', 'error');
     }
   }
 
@@ -320,10 +357,25 @@ export default function KnowledgePage() {
 
           {tab === 'PRODUCT' ? (
             <div className="mt-4 border-t border-border pt-4">
-              <Label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-primary">
-                <FileUp className="h-4 w-4" /> Importer un CSV
-                <input type="file" accept=".csv" onChange={onCsvFile} className="hidden" />
+              <Label className="flex w-fit cursor-pointer items-center gap-2 text-sm font-medium text-primary">
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileUp className="h-4 w-4" />
+                )}
+                Importer mon catalogue
+                <input
+                  type="file"
+                  accept=".csv,.pdf,.docx"
+                  onChange={onImportFile}
+                  disabled={busy}
+                  className="hidden"
+                />
               </Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Formats acceptés : CSV, PDF, Word (.docx). Le CSV remplit le catalogue produits ; les
+                PDF/Word sont lus par NOVA.
+              </p>
               {csvRows ? (
                 <div className="mt-3 space-y-2">
                   <p className="text-sm font-medium">Prévisualisation ({csvRows.length} produits)</p>
