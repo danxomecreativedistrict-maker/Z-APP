@@ -16,9 +16,14 @@ export class AuthController {
 
   @Post('register')
   @HttpCode(201)
-  async register(@Body() dto: RegisterDto) {
-    const data = await this.auth.register(dto);
-    return new Responded(data, 'Compte créé. Un code de vérification a été envoyé par email.');
+  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
+    const data = await this.auth.register(dto, res);
+    // V1 : connexion immédiate (accessToken renvoyé). V2 : code envoyé par email.
+    const message =
+      'accessToken' in data
+        ? 'Compte créé. Bienvenue sur Z-APP !'
+        : 'Compte créé. Un code de vérification a été envoyé par email.';
+    return new Responded(data, message);
   }
 
   @Post('verify-otp')

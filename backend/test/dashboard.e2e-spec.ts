@@ -44,7 +44,7 @@ describe('Dashboard (e2e)', () => {
     await app.init();
 
     const agent = request.agent(app.getHttpServer());
-    await agent
+    const reg = await agent
       .post('/api/auth/register')
       .send({
         email: 'dash@example.com',
@@ -55,11 +55,7 @@ describe('Dashboard (e2e)', () => {
         acceptPrivacy: true,
       })
       .expect(201);
-    const verify = await agent
-      .post('/api/auth/verify-otp')
-      .send({ email: 'dash@example.com', code: mail.lastCode })
-      .expect(200);
-    token = verify.body.data.accessToken as string;
+    token = reg.body.data.accessToken as string;
     await request(app.getHttpServer())
       .post('/api/company')
       .set({ Authorization: `Bearer ${token}` })

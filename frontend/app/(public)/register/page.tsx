@@ -50,8 +50,8 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register({ ...form, acceptTerms, acceptPrivacy, marketingEmails });
-      sessionStorage.setItem('zapp_pending_email', form.email);
-      router.push('/verify-otp');
+      // V1 : inscription = connexion immédiate → accès direct au tableau de bord.
+      router.replace('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec de l'inscription.");
     } finally {

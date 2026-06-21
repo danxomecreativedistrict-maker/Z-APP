@@ -56,25 +56,17 @@ describe('Auth (e2e)', () => {
     await app.close();
   });
 
-  it('register → verify-otp → me → refresh → logout', async () => {
+  it('register (connexion immédiate) → me → refresh → logout', async () => {
     const agent = request.agent(app.getHttpServer());
 
-    // 1. Inscription
+    // 1. Inscription : V1 = connexion immédiate, sans vérification email.
     const registerRes = await agent.post('/api/auth/register').send(credentials).expect(201);
     expect(registerRes.body.success).toBe(true);
-
-    // 2. Vérification OTP (code récupéré via le fake mail)
-    const code = mail.lastCode as string;
-    expect(code).toMatch(/^\d{6}$/);
-    const verifyRes = await agent
-      .post('/api/auth/verify-otp')
-      .send({ email: credentials.email, code })
-      .expect(200);
-    const accessToken = verifyRes.body.data.accessToken as string;
+    const accessToken = registerRes.body.data.accessToken as string;
     expect(accessToken).toEqual(expect.any(String));
-    expect(verifyRes.headers['set-cookie']?.[0]).toContain('refresh_token=');
+    expect(registerRes.headers['set-cookie']?.[0]).toContain('refresh_token=');
 
-    // 3. Route protégée /me
+    // 2. Route protégée /me accessible tout de suite
     const meRes = await agent
       .get('/api/auth/me')
       .set('Authorization', `Bearer ${accessToken}`)
@@ -82,11 +74,11 @@ describe('Auth (e2e)', () => {
     expect(meRes.body.data.email).toBe(credentials.email);
     expect(meRes.body.data.verified).toBe(true);
 
-    // 4. Rafraîchissement (cookie httpOnly porté par l'agent)
+    // 3. Rafraîchissement (cookie httpOnly porté par l'agent)
     const refreshRes = await agent.post('/api/auth/refresh').expect(200);
     expect(refreshRes.body.data.accessToken).toEqual(expect.any(String));
 
-    // 5. Déconnexion
+    // 4. Déconnexion
     const logoutRes = await agent.post('/api/auth/logout').expect(200);
     expect(logoutRes.body.success).toBe(true);
   });

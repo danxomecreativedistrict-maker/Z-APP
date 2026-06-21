@@ -46,6 +46,10 @@ export const envSchema = z.object({
   // App
   FRONTEND_URL: z.string().default('http://localhost:3000'),
   BACKEND_URL: z.string().default('http://localhost:3001'),
+
+  // Vérification email à l'inscription. V1 : désactivée (connexion immédiate).
+  // Mettre 'true' pour réactiver le flux OTP en V2.
+  EMAIL_VERIFICATION: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

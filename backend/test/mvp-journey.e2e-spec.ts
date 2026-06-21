@@ -35,7 +35,8 @@ describe('Parcours MVP (e2e)', () => {
 
   const register = async (email: string): Promise<string> => {
     const agent = request.agent(app.getHttpServer());
-    await agent
+    // V1 : l'inscription connecte immédiatement et renvoie l'accessToken.
+    const reg = await agent
       .post('/api/auth/register')
       .send({
         email,
@@ -46,11 +47,7 @@ describe('Parcours MVP (e2e)', () => {
         acceptPrivacy: true,
       })
       .expect(201);
-    const verify = await agent
-      .post('/api/auth/verify-otp')
-      .send({ email, code: mail.lastCode })
-      .expect(200);
-    return verify.body.data.accessToken as string;
+    return reg.body.data.accessToken as string;
   };
 
   const authGet = (token: string, path: string) =>

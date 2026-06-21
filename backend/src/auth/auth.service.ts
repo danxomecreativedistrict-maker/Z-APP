@@ -41,6 +41,12 @@ export class AuthService {
   private readonly accessSecret: string;
   private readonly refreshSecret: string;
   private readonly isProd: boolean;
+  /**
+   * V1 : la vérification email à l'inscription est DÉSACTIVÉE (connexion immédiate).
+   * Pour la réactiver en V2, définir EMAIL_VERIFICATION=true (le flux OTP ci-dessous
+   * — sendOtp / verifyOtp / resendOtp — est conservé intact à cette fin).
+   */
+  private readonly emailVerificationEnabled: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -56,10 +62,11 @@ export class AuthService {
     this.accessSecret = this.config.getOrThrow<string>('JWT_ACCESS_SECRET');
     this.refreshSecret = this.config.getOrThrow<string>('JWT_REFRESH_SECRET');
     this.isProd = this.config.get<string>('NODE_ENV') === 'production';
+    this.emailVerificationEnabled = this.config.get<string>('EMAIL_VERIFICATION') === 'true';
   }
 
   // ───────────────────────── Inscription ─────────────────────────
-  async register(dto: RegisterDto): Promise<{ email: string }> {
+  async register(dto: RegisterDto, res: Response): Promise<SessionResult | { email: string }> {
     const email = dto.email.toLowerCase().trim();
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -73,6 +80,8 @@ export class AuthService {
         passwordHash,
         firstName: dto.firstName.trim(),
         lastName: dto.lastName.trim(),
+        // V1 : compte validé d'office (pas de vérification email). V2 : false + OTP.
+        verified: !this.emailVerificationEnabled,
         termsAcceptedAt: now,
         privacyAcceptedAt: now,
         termsVersion: CURRENT_TERMS_VERSION,
@@ -80,8 +89,15 @@ export class AuthService {
       },
     });
     this.logger.log(`Nouvel utilisateur enregistré : ${user.email}`);
-    await this.sendOtp(user.email);
-    return { email: user.email };
+
+    // V2 (EMAIL_VERIFICATION=true) : on envoie un code et l'accès reste bloqué jusqu'à vérification.
+    if (this.emailVerificationEnabled) {
+      await this.sendOtp(user.email);
+      return { email: user.email };
+    }
+
+    // V1 (par défaut) : connexion immédiate, aucune friction.
+    return this.issueSession(user, res);
   }
 
   // ───────────────────────── OTP ─────────────────────────
@@ -141,7 +157,8 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Email ou mot de passe incorrect.');
     }
-    if (!user.verified) {
+    // V2 uniquement : on bloque la connexion tant que l'email n'est pas vérifié.
+    if (this.emailVerificationEnabled && !user.verified) {
       await this.sendOtp(email).catch(() => undefined);
       throw new ForbiddenException(
         'Compte non vérifié. Un nouveau code vous a été envoyé par email.',

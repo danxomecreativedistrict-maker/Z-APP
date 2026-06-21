@@ -35,6 +35,7 @@ interface UserCreateData {
   passwordHash: string;
   firstName: string;
   lastName: string;
+  verified?: boolean;
   termsAcceptedAt?: Date | null;
   privacyAcceptedAt?: Date | null;
   termsVersion?: string | null;
@@ -95,7 +96,7 @@ export class FakePrisma {
         passwordHash: args.data.passwordHash,
         firstName: args.data.firstName,
         lastName: args.data.lastName,
-        verified: false,
+        verified: args.data.verified ?? false,
         plan: 'STARTER' as Plan,
         createdAt: new Date(),
         termsAcceptedAt: args.data.termsAcceptedAt ?? null,
@@ -630,7 +631,7 @@ export class FakeAnthropic {
   }
 }
 
-export function makeConfig(): ConfigService {
+export function makeConfig(overrides: Record<string, string | number> = {}): ConfigService {
   const values: Record<string, string | number> = {
     JWT_ACCESS_TTL: '15m',
     JWT_REFRESH_TTL: '7d',
@@ -640,6 +641,7 @@ export function makeConfig(): ConfigService {
     JWT_REFRESH_SECRET: 'test-refresh-secret-0123456789',
     WHATSAPP_ENC_SECRET: 'test-whatsapp-encryption-secret',
     NODE_ENV: 'test',
+    ...overrides,
   };
   return {
     getOrThrow: <T>(key: string): T => values[key] as unknown as T,

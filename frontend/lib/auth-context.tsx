@@ -149,9 +149,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refreshAccess],
   );
 
-  const register = useCallback(async (payload: RegisterPayload) => {
-    await publicCall('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
-  }, []);
+  const register = useCallback(
+    async (payload: RegisterPayload) => {
+      const res = await publicCall<SessionData>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      // V1 : l'inscription connecte immédiatement (accessToken renvoyé).
+      // (En V2, le backend renverra { email } sans accessToken pour l'étape de vérification.)
+      if (res.data?.accessToken) {
+        applySession(res.data);
+      }
+    },
+    [applySession],
+  );
 
   const verifyOtp = useCallback(
     async (email: string, code: string) => {

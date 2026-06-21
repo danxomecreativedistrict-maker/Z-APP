@@ -45,9 +45,9 @@ describe('Company (e2e)', () => {
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
 
-    // Crée un compte vérifié pour obtenir un access token
+    // Crée un compte pour obtenir un access token (V1 : connexion immédiate)
     const agent = request.agent(app.getHttpServer());
-    await agent
+    const reg = await agent
       .post('/api/auth/register')
       .send({
         email: 'pme@example.com',
@@ -58,11 +58,7 @@ describe('Company (e2e)', () => {
         acceptPrivacy: true,
       })
       .expect(201);
-    const verify = await agent
-      .post('/api/auth/verify-otp')
-      .send({ email: 'pme@example.com', code: mail.lastCode })
-      .expect(200);
-    token = verify.body.data.accessToken as string;
+    token = reg.body.data.accessToken as string;
   });
 
   afterAll(async () => {
