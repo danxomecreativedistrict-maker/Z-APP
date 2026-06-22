@@ -139,15 +139,28 @@ export class NovaService {
   }
 
   private toTurns(history: Message[]): NovaTurn[] {
-    const turns: NovaTurn[] = history.map((m) => ({
+    const mapped: NovaTurn[] = history.map((m) => ({
       role: m.sender === Sender.PROSPECT ? 'user' : 'assistant',
       content: m.content,
     }));
-    // L'API Claude exige que le premier message soit de rôle 'user'.
-    while (turns.length > 0 && turns[0].role !== 'user') {
-      turns.shift();
+
+    // L'API Claude exige une alternance des rôles : on fusionne les messages consécutifs
+    // de même rôle (cas fréquent quand le prospect envoie plusieurs messages d'affilée).
+    const merged: NovaTurn[] = [];
+    for (const turn of mapped) {
+      const last = merged[merged.length - 1];
+      if (last && last.role === turn.role) {
+        last.content = `${last.content}\n${turn.content}`;
+      } else {
+        merged.push({ ...turn });
+      }
     }
-    return turns.length > 0 ? turns : [{ role: 'user', content: '(Début de conversation)' }];
+
+    // Le premier message doit être de rôle 'user'.
+    while (merged.length > 0 && merged[0].role !== 'user') {
+      merged.shift();
+    }
+    return merged.length > 0 ? merged : [{ role: 'user', content: '(Début de conversation)' }];
   }
 
   private async upsertProspect(companyId: string, phone: string): Promise<Prospect> {

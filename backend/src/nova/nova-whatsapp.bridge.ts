@@ -41,7 +41,19 @@ export class NovaWhatsappBridge implements OnModuleInit {
       this.logger.error(
         `Échec message texte : ${err instanceof Error ? err.message : String(err)}`,
       );
+      await this.sendFallback(companyId, from);
     }
+  }
+
+  /** Évite le silence total : on prévient le prospect en cas d'erreur du pipeline. */
+  private async sendFallback(companyId: string, to: string): Promise<void> {
+    await this.whatsapp
+      .sendText(
+        companyId,
+        to,
+        'Désolé, je rencontre un petit souci technique de mon côté. Un conseiller va vous répondre rapidement. 🙏',
+      )
+      .catch(() => undefined);
   }
 
   private async processMissedCall(companyId: string, from: string): Promise<void> {
@@ -71,6 +83,7 @@ export class NovaWhatsappBridge implements OnModuleInit {
       }
     } catch (err) {
       this.logger.error(`Échec note vocale : ${err instanceof Error ? err.message : String(err)}`);
+      await this.sendFallback(companyId, from);
     }
   }
 }

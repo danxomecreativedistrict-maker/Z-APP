@@ -1,5 +1,11 @@
 import { EventEmitter } from 'events';
-import { Injectable, Logger, NotFoundException, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WAStatus } from '@prisma/client';
 import makeWASocket, {
@@ -46,7 +52,7 @@ const silentLogger = {
 };
 
 @Injectable()
-export class WhatsappService implements OnModuleDestroy {
+export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WhatsappService.name);
   private readonly sockets = new Map<string, WASocket>();
   private readonly qrCodes = new Map<string, string>();
@@ -62,6 +68,29 @@ export class WhatsappService implements OnModuleDestroy {
   ) {
     this.encKey = deriveKey(this.config.getOrThrow<string>('WHATSAPP_ENC_SECRET'));
     this.emitter.setMaxListeners(0);
+  }
+
+  /**
+   * Au démarrage, on relance les sessions WhatsApp qui étaient connectées (identifiants en Redis).
+   * Indispensable après un redéploiement ou un réveil d'instance : sinon NOVA reste muette sur
+   * WhatsApp tant que personne n'ouvre la page de connexion.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      const sessions = await this.prisma.whatsAppSession.findMany({
+        where: { status: 'CONNECTED' },
+      });
+      for (const session of sessions) {
+        this.logger.log(`Reconnexion WhatsApp automatique pour l'entreprise ${session.companyId}`);
+        void this.ensureConnection(session.companyId).catch((err) =>
+          this.logger.error(`Échec de reconnexion ${session.companyId} : ${err}`),
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `Reconnexion WhatsApp au démarrage : ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /** Le gateway Socket.IO s'abonne ici pour relayer les statuts en temps réel. */
@@ -86,14 +115,15 @@ export class WhatsappService implements OnModuleDestroy {
     this.emitter.on('inboundAudio', listener);
   }
 
-  /** Envoie un message texte à un prospect via la session WhatsApp de l'entreprise. */
-  async sendText(companyId: string, to: string, text: string): Promise<void> {
+  /** Envoie un message texte. Retourne true si réellement envoyé, false si aucune session active. */
+  async sendText(companyId: string, to: string, text: string): Promise<boolean> {
     const sock = this.sockets.get(companyId);
     if (!sock) {
       this.logger.warn(`Aucune session WhatsApp active pour l'entreprise ${companyId}`);
-      return;
+      return false;
     }
     await sock.sendMessage(to, { text });
+    return true;
   }
 
   /** Envoie une note vocale (ptt) à un prospect — réponse vocale de NOVA. */

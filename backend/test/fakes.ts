@@ -149,6 +149,14 @@ export class FakePrisma {
     },
   };
 
+  // Sessions WhatsApp : suffisant pour le démarrage (reconnexion auto) — aucune session active en test.
+  whatsAppSession = {
+    findMany: async (): Promise<unknown[]> => [],
+    findUnique: async (): Promise<unknown> => null,
+    upsert: async (args: { create?: unknown; update?: unknown }): Promise<unknown> =>
+      args.create ?? args.update ?? {},
+  };
+
   private knowledgeItems: KnowledgeItem[] = [];
 
   knowledgeItem = {
@@ -547,6 +555,10 @@ export class FakeMail {
     this.lastCode = code;
   }
 
+  async sendNotificationEmail(): Promise<boolean> {
+    return false; // pas d'envoi réel en test
+  }
+
   asService(): MailService {
     return this as unknown as MailService;
   }
@@ -575,8 +587,8 @@ export class FakeWhatsapp {
   onInboundAudio(): void {
     // no-op pour les tests
   }
-  async sendText(): Promise<void> {
-    // no-op pour les tests
+  async sendText(): Promise<boolean> {
+    return true; // simule un envoi réussi (session active)
   }
   async sendVoice(): Promise<void> {
     // no-op pour les tests

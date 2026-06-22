@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Notification, NotifType, OrderStatus, ProspectScore } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { MailService } from '../mail/mail.service';
 import { RealtimeService } from '../realtime/realtime.service';
 
 export interface NotifyInput {
@@ -80,6 +81,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsapp: WhatsappService,
+    @Optional() private readonly mail?: MailService,
     @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
@@ -88,7 +90,10 @@ export class NotificationsService {
    * (destinataire = alertPhone, sinon managerPhone). Marque `sent=true` si l'envoi réussit.
    */
   async notify(input: NotifyInput): Promise<Notification> {
-    const company = await this.prisma.company.findUnique({ where: { id: input.companyId } });
+    const company = await this.prisma.company.findUnique({
+      where: { id: input.companyId },
+      include: { user: true },
+    });
     const recipient = input.recipient || company?.alertPhone || company?.managerPhone || '';
     const notif = await this.prisma.notification.create({
       data: {
@@ -99,27 +104,43 @@ export class NotificationsService {
       },
     });
 
-    let result = notif;
+    let delivered = false;
+
+    // 1) WhatsApp (canal principal) — seulement si une session est active.
     const jid = toWhatsappJid(recipient);
-    if (!jid) {
-      this.logger.warn(
-        `Notification ${input.type} non envoyée : aucun destinataire pour l'entreprise ${input.companyId}.`,
-      );
-    } else {
+    if (jid) {
       try {
-        await this.whatsapp.sendText(input.companyId, jid, input.content);
-        result = await this.prisma.notification.update({
-          where: { id: notif.id },
-          data: { sent: true },
-        });
-        this.logger.log(`Notification ${input.type} envoyée au gérant (${recipient}).`);
+        if (await this.whatsapp.sendText(input.companyId, jid, input.content)) {
+          delivered = true;
+          this.logger.log(
+            `Notification ${input.type} envoyée au gérant par WhatsApp (${recipient}).`,
+          );
+        }
       } catch (err) {
         this.logger.error(
-          `Échec d'envoi de la notification ${input.type} : ${err instanceof Error ? err.message : String(err)}`,
+          `Échec WhatsApp notification ${input.type} : ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }
 
+    // 2) Repli e-mail vers le gérant (fiable même si WhatsApp est hors-ligne).
+    const email = company?.user?.email;
+    if (this.mail && email) {
+      if (await this.mail.sendNotificationEmail(email, input.type, input.content)) {
+        delivered = true;
+        this.logger.log(`Notification ${input.type} envoyée au gérant par e-mail (${email}).`);
+      }
+    }
+
+    if (!delivered) {
+      this.logger.warn(
+        `Notification ${input.type} non distribuée (ni WhatsApp ni e-mail) pour l'entreprise ${input.companyId}.`,
+      );
+    }
+
+    const result = delivered
+      ? await this.prisma.notification.update({ where: { id: notif.id }, data: { sent: true } })
+      : notif;
     this.realtime?.emit('notification', input.companyId, result);
     return result;
   }

@@ -100,6 +100,32 @@ export class MailService {
     this.logger.log(`📧 [DEV ALERTE] WhatsApp déconnecté pour ${companyName} → ${to}`);
   }
 
+  /** Alerte gérant par email (repli quand WhatsApp est hors-ligne). Retourne true si envoyé. */
+  async sendNotificationEmail(to: string, type: string, content: string): Promise<boolean> {
+    try {
+      return await this.deliver(
+        to,
+        `Z-APP — Notification (${type})`,
+        this.notificationTemplate(content),
+      );
+    } catch (err) {
+      this.logger.error(
+        `Échec de la notification email à ${to} : ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return false;
+    }
+  }
+
+  private notificationTemplate(content: string): string {
+    return `
+      <div style="font-family: Inter, Arial, sans-serif; max-width: 480px; margin: auto; padding: 32px;">
+        <h1 style="color: #1B4FD8;">Z-APP · NOVA</h1>
+        <p style="font-size:15px;color:#0f172a;">${content}</p>
+        <p style="color:#64748b;font-size:12px;">Notification automatique de votre agent NOVA.</p>
+      </div>
+    `;
+  }
+
   private disconnectTemplate(companyName: string): string {
     return `
       <div style="font-family: Inter, Arial, sans-serif; max-width: 480px; margin: auto; padding: 32px;">
