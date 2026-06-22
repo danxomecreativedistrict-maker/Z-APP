@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { KBType } from '@prisma/client';
 import { FakeEmbedding, FakePrisma } from '../../test/fakes';
+import { CatalogExtractionService } from './catalog-extraction.service';
 import { KnowledgeService } from './knowledge.service';
 
 describe('KnowledgeService', () => {
@@ -8,10 +9,16 @@ describe('KnowledgeService', () => {
   let prisma: FakePrisma;
   const USER = 'user-1';
 
+  // Stub d'extraction IA (non sollicité par les méthodes testées ici).
+  const extraction = {
+    isLive: false,
+    extract: async () => [],
+  } as unknown as CatalogExtractionService;
+
   beforeEach(async () => {
     prisma = new FakePrisma();
     await prisma.company.create({ data: { userId: USER, name: 'PME' } });
-    service = new KnowledgeService(prisma.asService(), new FakeEmbedding().asService());
+    service = new KnowledgeService(prisma.asService(), new FakeEmbedding().asService(), extraction);
   });
 
   it("create ajoute un élément (et l'embed)", async () => {
@@ -45,6 +52,17 @@ describe('KnowledgeService', () => {
     ]);
     expect(res.imported).toBe(2);
     expect(await service.list(USER, KBType.PRODUCT)).toHaveLength(2);
+  });
+
+  it('saveCatalog enregistre les produits validés (PRODUCT + catalogue)', async () => {
+    const res = await service.saveCatalog(USER, [
+      { nom: 'Pizza Margherita', categorie: 'Pizzas', prix_min: 3000, devise: 'FCFA' },
+      { nom: 'Jus de bissap', prix_min: 500, prix_max: 1000 },
+    ]);
+    expect(res.imported).toBe(2);
+    const items = await service.list(USER, KBType.PRODUCT);
+    expect(items).toHaveLength(2);
+    expect(items.some((i) => i.title === 'Pizza Margherita')).toBe(true);
   });
 
   it("isolation : un autre compte n'accède pas aux éléments", async () => {

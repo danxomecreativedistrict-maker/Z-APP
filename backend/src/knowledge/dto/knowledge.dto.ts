@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNumber,
@@ -99,4 +100,57 @@ export class SearchDto {
   @Min(1)
   @Max(20)
   k?: number;
+}
+
+/** Lien Google Sheets (partagé publiquement) à importer. */
+export class ExtractUrlDto {
+  @IsString()
+  @MinLength(10, { message: 'Lien invalide.' })
+  @MaxLength(500)
+  url!: string;
+}
+
+/** Produit (extrait par IA puis validé/édité par l'utilisateur) à enregistrer. */
+export class CatalogProductDto {
+  @IsString()
+  @MinLength(1, { message: 'Le nom du produit est requis.' })
+  @MaxLength(200)
+  nom!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  categorie?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  prix_min?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  prix_max?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  devise?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  disponible?: boolean;
+}
+
+export class SaveCatalogDto {
+  @ValidateNested({ each: true })
+  @Type(() => CatalogProductDto)
+  @ArrayMinSize(1, { message: 'Aucun produit à enregistrer.' })
+  @ArrayMaxSize(500, { message: 'Maximum 500 produits par import.' })
+  produits!: CatalogProductDto[];
 }

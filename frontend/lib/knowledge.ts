@@ -17,6 +17,26 @@ export interface ProductRow {
   stock?: number;
 }
 
+export type Confiance = 'haute' | 'moyenne' | 'basse';
+
+/** Produit extrait d'un catalogue par l'IA (avant validation humaine). */
+export interface ExtractedProduct {
+  nom: string;
+  categorie: string;
+  description: string;
+  prix_min: number | null;
+  prix_max: number | null;
+  devise: string;
+  disponible: boolean;
+  confiance_extraction: Confiance;
+}
+
+export const CONFIANCE_STYLES: Record<Confiance, string> = {
+  haute: 'bg-success/10 text-success',
+  moyenne: 'bg-primary/10 text-primary',
+  basse: 'bg-accent/10 text-accent',
+};
+
 export const KB_TABS: { type: KBType; label: string }[] = [
   { type: 'PRODUCT', label: 'Produits' },
   { type: 'FAQ', label: 'FAQ' },

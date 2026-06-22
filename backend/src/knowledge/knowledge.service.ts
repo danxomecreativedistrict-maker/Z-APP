@@ -2,7 +2,16 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { KBType, KnowledgeItem } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
-import { CreateKnowledgeDto, ProductRowDto, UpdateKnowledgeDto } from './dto/knowledge.dto';
+import { CatalogExtractionService } from './catalog-extraction.service';
+import { ExtractedProduct } from './catalog.types';
+import {
+  CatalogProductDto,
+  CreateKnowledgeDto,
+  ProductRowDto,
+  UpdateKnowledgeDto,
+} from './dto/knowledge.dto';
+
+type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
 export interface SearchResult {
   id: string;
@@ -22,6 +31,7 @@ export class KnowledgeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly embeddings: EmbeddingService,
+    private readonly extraction: CatalogExtractionService,
   ) {}
 
   async create(userId: string, dto: CreateKnowledgeDto): Promise<KnowledgeItem> {
@@ -98,7 +108,7 @@ export class KnowledgeService {
     if (!file) {
       throw new BadRequestException('Aucun fichier reçu.');
     }
-    const text = (await this.extractText(file)).replace(/\s+/g, ' ').trim();
+    const text = (await this.fileToText(file)).replace(/\s+/g, ' ').trim();
     if (!text) {
       throw new BadRequestException(
         "Aucun texte exploitable n'a pu être extrait de ce fichier. " +
@@ -120,6 +130,80 @@ export class KnowledgeService {
       await this.embedItem(item.id, chunks[i]);
     }
     return { chunks: chunks.length };
+  }
+
+  // ─────────────────── Import catalogue : extraction IA (sans enregistrer) ───────────────────
+
+  /** Extrait des produits structurés depuis un fichier (PDF/Word/Excel/CSV/image). NE sauvegarde PAS. */
+  async extractFromFile(
+    userId: string,
+    file: Express.Multer.File | undefined,
+  ): Promise<ExtractedProduct[]> {
+    await this.resolveCompanyId(userId);
+    if (!file) {
+      throw new BadRequestException('Aucun fichier reçu.');
+    }
+    const name = (file.originalname ?? '').toLowerCase();
+    const isImage = file.mimetype.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/.test(name);
+    if (isImage) {
+      return this.extraction.extract({
+        image: { base64: file.buffer.toString('base64'), mediaType: this.imageMediaType(file) },
+      });
+    }
+    const text = (await this.fileToText(file)).trim();
+    if (!text) {
+      throw new BadRequestException(
+        "Aucun texte exploitable n'a pu être lu dans ce fichier. Vérifiez le document.",
+      );
+    }
+    return this.extraction.extract({ text });
+  }
+
+  /** Extrait des produits depuis un lien Google Sheets public. NE sauvegarde PAS. */
+  async extractFromUrl(userId: string, url: string): Promise<ExtractedProduct[]> {
+    await this.resolveCompanyId(userId);
+    const csvUrl = this.toGoogleSheetsCsvUrl(url);
+    if (!csvUrl) {
+      throw new BadRequestException('Lien Google Sheets invalide.');
+    }
+    let text: string;
+    try {
+      const resp = await fetch(csvUrl);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      text = await resp.text();
+    } catch {
+      throw new BadRequestException(
+        'Impossible de lire ce Google Sheet. Partagez-le en « Toute personne disposant du lien (lecture) ».',
+      );
+    }
+    if (text.trim().startsWith('<')) {
+      throw new BadRequestException(
+        'Le lien renvoie une page web (feuille non publique ?). Activez le partage public en lecture.',
+      );
+    }
+    return this.extraction.extract({ text });
+  }
+
+  /** Enregistre les produits validés par l'utilisateur (Product + base RAG). */
+  async saveCatalog(userId: string, produits: CatalogProductDto[]): Promise<{ imported: number }> {
+    const companyId = await this.resolveCompanyId(userId);
+    let imported = 0;
+    for (const p of produits) {
+      const content = this.formatExtracted(p);
+      const item = await this.prisma.knowledgeItem.create({
+        data: { companyId, type: KBType.PRODUCT, title: p.nom, content },
+      });
+      await this.embedItem(item.id, `${p.nom}\n${content}`);
+      await this.upsertCatalogProduct(companyId, {
+        name: p.nom,
+        description: p.description,
+        price: p.prix_min,
+        unit: p.devise,
+      });
+      imported += 1;
+    }
+    this.logger.log(`${imported} produit(s) catalogue importé(s) pour l'entreprise ${companyId}`);
+    return { imported };
   }
 
   /** Recherche sémantique top-k (cosine) pour l'utilisateur courant. */
@@ -216,7 +300,7 @@ export class KnowledgeService {
     return chunks.length > 0 ? chunks : [text];
   }
 
-  private async extractText(file: Express.Multer.File): Promise<string> {
+  private async fileToText(file: Express.Multer.File): Promise<string> {
     // Certains navigateurs envoient un type MIME générique : on se rabat sur l'extension.
     const name = (file.originalname ?? '').toLowerCase();
     const isPdf = file.mimetype === 'application/pdf' || name.endsWith('.pdf');
@@ -225,6 +309,13 @@ export class KnowledgeService {
       file.mimetype === DOC_MIME ||
       name.endsWith('.docx') ||
       name.endsWith('.doc');
+    const isSheet =
+      name.endsWith('.xlsx') ||
+      name.endsWith('.xls') ||
+      name.endsWith('.csv') ||
+      file.mimetype.includes('sheet') ||
+      file.mimetype.includes('excel') ||
+      file.mimetype.includes('csv');
 
     if (isPdf) {
       const pdfParse = (await import('pdf-parse')).default;
@@ -236,6 +327,45 @@ export class KnowledgeService {
       const result = await extractRawText({ buffer: file.buffer });
       return result.value;
     }
-    throw new BadRequestException('Format non supporté. Formats acceptés : PDF, Word (.docx).');
+    if (isSheet) {
+      // SheetJS lit .xlsx / .xls / .csv et exporte chaque feuille en texte CSV.
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(file.buffer, { type: 'buffer' });
+      return wb.SheetNames.map((sheet) => XLSX.utils.sheet_to_csv(wb.Sheets[sheet])).join('\n\n');
+    }
+    throw new BadRequestException(
+      'Format non supporté. Formats acceptés : PDF, Word, Excel, CSV, image.',
+    );
+  }
+
+  private imageMediaType(file: Express.Multer.File): ImageMediaType {
+    const name = (file.originalname ?? '').toLowerCase();
+    if (file.mimetype === 'image/png' || name.endsWith('.png')) return 'image/png';
+    if (file.mimetype === 'image/webp' || name.endsWith('.webp')) return 'image/webp';
+    if (file.mimetype === 'image/gif' || name.endsWith('.gif')) return 'image/gif';
+    return 'image/jpeg';
+  }
+
+  /** Construit l'URL d'export CSV d'un Google Sheet à partir de son lien de partage. */
+  private toGoogleSheetsCsvUrl(url: string): string | null {
+    const idMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!idMatch) return null;
+    const gidMatch = url.match(/[#&?]gid=([0-9]+)/);
+    const gid = gidMatch ? gidMatch[1] : '0';
+    return `https://docs.google.com/spreadsheets/d/${idMatch[1]}/export?format=csv&gid=${gid}`;
+  }
+
+  private formatExtracted(p: CatalogProductDto): string {
+    const lines = [`Produit : ${p.nom}`];
+    if (p.categorie) lines.push(`Catégorie : ${p.categorie}`);
+    if (p.description) lines.push(`Description : ${p.description}`);
+    const devise = p.devise ?? 'FCFA';
+    if (p.prix_min != null && p.prix_max != null && p.prix_max !== p.prix_min) {
+      lines.push(`Prix : ${p.prix_min} - ${p.prix_max} ${devise}`);
+    } else if (p.prix_min != null) {
+      lines.push(`Prix : ${p.prix_min} ${devise}`);
+    }
+    if (p.disponible === false) lines.push('Disponibilité : indisponible');
+    return lines.join('\n');
   }
 }

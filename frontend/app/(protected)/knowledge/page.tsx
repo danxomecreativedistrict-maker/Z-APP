@@ -2,8 +2,16 @@
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import Papa from 'papaparse';
-import { ArrowLeft, FileUp, Loader2, Search, Trash2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Camera,
+  Loader2,
+  Plus,
+  Search,
+  Trash2,
+  UploadCloud,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,7 +19,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast';
-import { csvRowToProduct, KB_TABS, KBType, KnowledgeItem, ProductRow } from '@/lib/knowledge';
+import {
+  CONFIANCE_STYLES,
+  ExtractedProduct,
+  KB_TABS,
+  KBType,
+  KnowledgeItem,
+  ProductRow,
+} from '@/lib/knowledge';
 
 interface SearchHit {
   id: string;
@@ -20,6 +35,17 @@ interface SearchHit {
   type: string;
   score: number;
 }
+
+const emptyExtracted = (): ExtractedProduct => ({
+  nom: '',
+  categorie: '',
+  description: '',
+  prix_min: null,
+  prix_max: null,
+  devise: 'FCFA',
+  disponible: true,
+  confiance_extraction: 'haute',
+});
 
 export default function KnowledgePage() {
   const { authFetch } = useAuth();
@@ -35,7 +61,11 @@ export default function KnowledgePage() {
 
   const [product, setProduct] = useState({ name: '', description: '', price: '', unit: '', stock: '' });
   const [generic, setGeneric] = useState({ title: '', content: '' });
-  const [csvRows, setCsvRows] = useState<ProductRow[] | null>(null);
+
+  // Import catalogue (extraction IA → prévisualisation éditable → validation)
+  const [extracted, setExtracted] = useState<ExtractedProduct[] | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [sheetUrl, setSheetUrl] = useState('');
 
   const load = useCallback(
     async (type: KBType) => {
@@ -110,84 +140,93 @@ export default function KnowledgePage() {
     }
   }
 
-  function parseCsvFile(file: File): void {
-    Papa.parse<Record<string, string>>(file, {
-      header: true,
-      skipEmptyLines: true,
-      delimitersToGuess: [',', ';', '\t', '|'], // Excel FR exporte souvent en « ; »
-      complete: (res) => {
-        const rows = res.data.map(csvRowToProduct).filter((r): r is ProductRow => r !== null);
-        if (rows.length === 0) {
-          const cols = res.meta.fields?.join(', ') || 'aucune';
-          toast(
-            `Aucun produit détecté. Colonnes lues : ${cols}. Une colonne « nom » (ou name) est requise.`,
-            'error',
-          );
-          return;
-        }
-        setCsvRows(rows);
-      },
-      error: (err) => toast(`Erreur de lecture du CSV : ${err.message}`, 'error'),
-    });
-  }
-
-  async function confirmCsv(): Promise<void> {
-    if (!csvRows?.length) return;
-    setBusy(true);
-    try {
-      await authFetch('/knowledge/import-csv', {
-        method: 'POST',
-        body: JSON.stringify({ products: csvRows }),
-      });
-      toast(`${csvRows.length} produit(s) importé(s).`);
-      setCsvRows(null);
-      void load('PRODUCT');
-    } catch (err) {
-      toast(err instanceof Error ? err.message : 'Erreur.', 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // Téléverse un document (PDF/Word) : extraction de texte côté backend → base de connaissances.
-  async function uploadDocument(file: File): Promise<void> {
-    setBusy(true);
+  // ─────────── Import catalogue ───────────
+  async function extractFromFile(file: File): Promise<void> {
+    setExtracting(true);
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await authFetch<{ chunks: number }>('/knowledge/import-file', {
+      const res = await authFetch<ExtractedProduct[]>('/knowledge/extract', {
         method: 'POST',
         body: fd,
       });
-      if (!res.data.chunks) {
-        toast(
-          "Aucun contenu exploitable n'a pu être extrait de ce document. Vérifiez le fichier.",
-          'error',
-        );
+      if (!res.data.length) {
+        toast('Aucun produit détecté dans ce fichier. Essayez un autre format.', 'error');
         return;
       }
-      toast(`Document importé : ${res.data.chunks} passage(s) ajouté(s). NOVA peut s'en servir.`);
-      setTab('DOCUMENT');
-      void load('DOCUMENT');
+      setExtracted(res.data);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Échec de l'import du document.", 'error');
+      toast(err instanceof Error ? err.message : "Échec de l'extraction.", 'error');
     } finally {
-      setBusy(false);
+      setExtracting(false);
     }
   }
 
-  // Routeur d'import : CSV → aperçu produits ; PDF/Word → extraction backend.
-  function onImportFile(e: ChangeEvent<HTMLInputElement>): void {
+  function onCatalogFile(e: ChangeEvent<HTMLInputElement>): void {
     const file = e.target.files?.[0];
-    e.target.value = ''; // autorise la re-sélection du même fichier
-    if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext === 'csv') {
-      parseCsvFile(file);
-    } else if (ext === 'pdf' || ext === 'docx') {
-      void uploadDocument(file);
-    } else {
-      toast('Format non supporté. Formats acceptés : CSV, PDF, Word (.docx).', 'error');
+    e.target.value = '';
+    if (file) void extractFromFile(file);
+  }
+
+  async function onSheetImport(): Promise<void> {
+    if (!sheetUrl.trim()) return;
+    setExtracting(true);
+    try {
+      const res = await authFetch<ExtractedProduct[]>('/knowledge/extract-url', {
+        method: 'POST',
+        body: JSON.stringify({ url: sheetUrl.trim() }),
+      });
+      if (!res.data.length) {
+        toast('Aucun produit détecté dans ce Google Sheet.', 'error');
+        return;
+      }
+      setExtracted(res.data);
+      setSheetUrl('');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Échec de l'import.", 'error');
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  function updateRow(i: number, patch: Partial<ExtractedProduct>): void {
+    setExtracted((prev) => (prev ? prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)) : prev));
+  }
+  function removeRow(i: number): void {
+    setExtracted((prev) => (prev ? prev.filter((_, idx) => idx !== i) : prev));
+  }
+  function addRow(): void {
+    setExtracted((prev) => [...(prev ?? []), emptyExtracted()]);
+  }
+
+  async function confirmCatalog(): Promise<void> {
+    if (!extracted?.length) return;
+    if (extracted.some((p) => !p.nom.trim())) {
+      toast('Chaque produit doit avoir un nom.', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const produits = extracted.map((p) => ({
+        nom: p.nom.trim(),
+        categorie: p.categorie || undefined,
+        description: p.description || undefined,
+        prix_min: p.prix_min ?? undefined,
+        prix_max: p.prix_max ?? undefined,
+        devise: p.devise || undefined,
+        disponible: p.disponible,
+      }));
+      const res = await authFetch<{ imported: number }>('/knowledge/catalog', {
+        method: 'POST',
+        body: JSON.stringify({ produits }),
+      });
+      toast(`${res.data.imported} produit(s) importé(s) dans votre catalogue !`);
+      setExtracted(null);
+      void load('PRODUCT');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Échec de l'enregistrement.", 'error');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -210,6 +249,8 @@ export default function KnowledgePage() {
       setSearching(false);
     }
   }
+
+  const lowConfidence = extracted?.filter((p) => p.confiance_extraction === 'basse').length ?? 0;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
@@ -276,11 +317,161 @@ export default function KnowledgePage() {
         ))}
       </div>
 
-      {/* Formulaire d'ajout */}
+      {/* Import catalogue (onglet Produits) */}
+      {tab === 'PRODUCT' ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-base">Importer mon catalogue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {extracted === null ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Téléversez votre catalogue tel quel — NOVA en extrait les produits automatiquement.
+                  Formats : <strong>PDF, Word, Excel, CSV, ou une photo</strong> de votre menu/carte.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Label
+                    className={`inline-flex cursor-pointer items-center gap-2 rounded-button bg-primary px-4 py-2 text-sm font-medium text-white ${extracting ? 'opacity-60' : ''}`}
+                  >
+                    {extracting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <UploadCloud className="h-4 w-4" />
+                    )}
+                    Choisir un fichier
+                    <input
+                      type="file"
+                      accept=".pdf,.docx,.xlsx,.xls,.csv,image/*"
+                      onChange={onCatalogFile}
+                      disabled={extracting}
+                      className="hidden"
+                    />
+                  </Label>
+                  <Label
+                    className={`inline-flex cursor-pointer items-center gap-2 rounded-button border border-border px-4 py-2 text-sm font-medium ${extracting ? 'opacity-60' : ''}`}
+                  >
+                    <Camera className="h-4 w-4" /> Prendre une photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={onCatalogFile}
+                      disabled={extracting}
+                      className="hidden"
+                    />
+                  </Label>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={sheetUrl}
+                    onChange={(e) => setSheetUrl(e.target.value)}
+                    placeholder="…ou collez un lien Google Sheets (partagé en lecture)"
+                  />
+                  <Button variant="outline" onClick={onSheetImport} disabled={extracting || !sheetUrl}>
+                    Importer
+                  </Button>
+                </div>
+                {extracting ? (
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Analyse du document par NOVA…
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">
+                    {extracted.length} produit(s) détecté(s) — vérifiez puis validez
+                  </p>
+                  <Button variant="ghost" onClick={() => setExtracted(null)} disabled={busy}>
+                    Annuler
+                  </Button>
+                </div>
+                {lowConfidence > 0 ? (
+                  <p className="flex items-center gap-2 rounded-input bg-accent/10 p-2 text-xs text-accent">
+                    <AlertTriangle className="h-4 w-4" />
+                    {lowConfidence} produit(s) à faible confiance (en orange) — vérifiez-les.
+                  </p>
+                ) : null}
+
+                <div className="space-y-3">
+                  {extracted.map((p, i) => (
+                    <div
+                      key={i}
+                      className={`rounded-card border p-3 ${p.confiance_extraction === 'basse' ? 'border-accent/50 bg-accent/5' : 'border-border'}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${CONFIANCE_STYLES[p.confiance_extraction]}`}
+                        >
+                          confiance {p.confiance_extraction}
+                        </span>
+                        <button
+                          onClick={() => removeRow(i)}
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label="Supprimer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <Input
+                          value={p.nom}
+                          onChange={(e) => updateRow(i, { nom: e.target.value })}
+                          placeholder="Nom du produit"
+                        />
+                        <Input
+                          value={p.categorie}
+                          onChange={(e) => updateRow(i, { categorie: e.target.value })}
+                          placeholder="Catégorie"
+                        />
+                        <Input
+                          type="number"
+                          value={p.prix_min ?? ''}
+                          onChange={(e) =>
+                            updateRow(i, {
+                              prix_min: e.target.value === '' ? null : Number(e.target.value),
+                            })
+                          }
+                          placeholder="Prix"
+                        />
+                        <Input
+                          value={p.devise}
+                          onChange={(e) => updateRow(i, { devise: e.target.value })}
+                          placeholder="Devise (FCFA)"
+                        />
+                      </div>
+                      <Textarea
+                        className="mt-2"
+                        value={p.description}
+                        onChange={(e) => updateRow(i, { description: e.target.value })}
+                        placeholder="Description"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={addRow} disabled={busy}>
+                    <Plus className="h-4 w-4" /> Ajouter un produit
+                  </Button>
+                  <Button variant="success" onClick={confirmCatalog} disabled={busy}>
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Valider l’import ({extracted.length})
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Formulaire d'ajout manuel */}
       <Card className="mt-6">
         <CardHeader>
           <CardTitle className="text-base">
-            {tab === 'PRODUCT' ? 'Ajouter un produit' : 'Ajouter un élément'}
+            {tab === 'PRODUCT' ? 'Ajouter un produit manuellement' : 'Ajouter un élément'}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -361,63 +552,6 @@ export default function KnowledgePage() {
               </Button>
             </form>
           )}
-
-          {tab === 'PRODUCT' ? (
-            <div className="mt-4 border-t border-border pt-4">
-              <Label className="flex w-fit cursor-pointer items-center gap-2 text-sm font-medium text-primary">
-                {busy ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FileUp className="h-4 w-4" />
-                )}
-                Importer mon catalogue
-                <input
-                  type="file"
-                  accept=".csv,.pdf,.docx"
-                  onChange={onImportFile}
-                  disabled={busy}
-                  className="hidden"
-                />
-              </Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Formats acceptés : CSV, PDF, Word (.docx). Le CSV remplit le catalogue produits ; les
-                PDF/Word sont lus par NOVA.
-              </p>
-              {csvRows ? (
-                <div className="mt-3 space-y-2">
-                  <p className="text-sm font-medium">Prévisualisation ({csvRows.length} produits)</p>
-                  <div className="max-h-48 overflow-auto rounded-input border border-border text-sm">
-                    <table className="w-full">
-                      <thead className="bg-secondary text-left">
-                        <tr>
-                          <th className="p-2">Nom</th>
-                          <th className="p-2">Prix</th>
-                          <th className="p-2">Stock</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {csvRows.slice(0, 50).map((r, i) => (
-                          <tr key={i} className="border-t border-border">
-                            <td className="p-2">{r.name}</td>
-                            <td className="p-2">{r.price ?? '—'}</td>
-                            <td className="p-2">{r.stock ?? '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={confirmCsv} disabled={busy} variant="success">
-                      Valider l’import
-                    </Button>
-                    <Button onClick={() => setCsvRows(null)} variant="ghost">
-                      Annuler
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </CardContent>
       </Card>
 
